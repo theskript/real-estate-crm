@@ -12,8 +12,52 @@ Functions + Supabase**. No heavy frontend framework, no monthly SaaS CRM fee.
 - **Netlify Functions** (CommonJS) as the API layer
 - **Supabase** (Postgres) as the database — accessed only via the service-role
   key from serverless functions, never exposed to the browser
+- **Local SQLite fallback** (see below) — works with zero setup and zero
+  external accounts, for whenever Supabase is unavailable or you just want to
+  start using the CRM immediately
 - Hand-rolled JWT auth (HMAC-SHA256) + `bcryptjs` password hashing — no
   external auth vendor, no monthly per-seat cost
+
+## Quick start (no Supabase account needed)
+
+If Supabase is down, or you just don't have a project set up yet, the app
+works out of the box against a local SQLite database — no signup, no config:
+
+```bash
+npm install
+cp .env.example .env   # defaults are fine; just set ADMIN_JWT_SECRET and ADMIN_PASSWORD
+npm run dev
+```
+
+Every `netlify/functions/*.cjs` file talks to the database only through
+`getSupabase()` in `_utils.cjs`. Whenever `SUPABASE_URL`/
+`SUPABASE_SERVICE_ROLE_KEY` aren't set (or `DB_PROVIDER=sqlite` is set
+explicitly), it transparently returns a local SQLite-backed client instead —
+see `netlify/functions/_sqlite.cjs`. It has the same `.from(table).select()...`
+query-builder shape Supabase's JS client uses, so **every function file is
+completely unchanged** either way.
+
+- The database file lives at `data/teaka.sqlite` (gitignored — never committed).
+- It's created and seeded automatically from `db/schema.sqlite.sql` the first
+  time any function runs. Nothing to run by hand.
+- This is a genuinely full-featured local backend, not a stub — leads, tasks,
+  activities, properties, tags, buyer/property matching, and the audit log all
+  work identically to the Supabase-backed version, including per-agent lead
+  visibility and role-based access control.
+- **Limitation:** since Netlify Functions run in ephemeral containers when
+  deployed, this file-based database only makes sense for **local
+  development** — once Supabase is back (or if you deploy to Netlify for a
+  real team), fill in `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` in your `.env`
+  and it switches back to Postgres automatically, no code changes needed. If
+  you want an interim option that also works when *deployed*, ask about
+  swapping in [Turso](https://turso.tech) (hosted, serverless-friendly SQLite)
+  — it speaks the same SQL dialect as this fallback, so migrating is a driver
+  swap, not a rewrite.
+- A regression test for the fallback lives at
+  [scripts/smoke-test-sqlite.cjs](scripts/smoke-test-sqlite.cjs) — run
+  `node scripts/smoke-test-sqlite.cjs` any time you touch `_sqlite.cjs`.
+
+## Using Supabase instead (recommended once it's back up)
 
 ## 1. Create your Supabase project
 
@@ -37,6 +81,7 @@ cp .env.example .env
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (service_role, secret) |
 | `ADMIN_JWT_SECRET` | Generate with `openssl rand -hex 32` |
 | `ADMIN_PASSWORD` | Any password you choose — used only for your very first login (see below) |
+| `DB_PROVIDER` | Leave unset. Set to `sqlite` to force the local fallback even if Supabase vars are also present. |
 
 ## 3. First login (bootstrap)
 

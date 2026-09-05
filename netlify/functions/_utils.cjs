@@ -10,12 +10,24 @@ require('dotenv').config();
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
-// ── Supabase client ───────────────────────────────────────────────────────────
+// ── Database client ───────────────────────────────────────────────────────────
+// Uses Supabase when SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY are configured.
+// Otherwise (e.g. no project created yet, or Supabase is down) it transparently
+// falls back to a local SQLite file via _sqlite.cjs — same .from()/.select()
+// query-builder shape, zero code changes needed anywhere else. Set
+// DB_PROVIDER=sqlite to force the fallback even if Supabase vars are present.
+
+function usingSqlite() {
+  return process.env.DB_PROVIDER === 'sqlite' || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY;
+}
 
 function getSupabase() {
+  if (usingSqlite()) {
+    const { getSqliteDB } = require('./_sqlite.cjs');
+    return getSqliteDB();
+  }
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured');
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
