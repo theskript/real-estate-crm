@@ -1,0 +1,117 @@
+---
+// Public login page — no auth check
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — Teaka CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+  <meta name="robots" content="noindex, nofollow" />
+</head>
+<body class="min-h-screen bg-gradient-to-br from-primary-900 via-neutral-900 to-primary-800 font-sans flex items-center justify-center p-4">
+
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <div class="w-14 h-14 rounded-2xl bg-primary-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-900/40">
+        <span class="text-white text-2xl font-bold font-display">T</span>
+      </div>
+      <h1 class="text-2xl font-display font-bold text-white">Teaka</h1>
+      <p class="text-sm text-primary-200/80 mt-1">Real Estate CRM — Sign in to continue</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-xl border border-white/10 p-8">
+      <h2 class="text-lg font-semibold text-neutral-900 mb-6">Sign In</h2>
+
+      <div id="error-banner" class="hidden mb-5 items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span id="error-text">Invalid username or password.</span>
+      </div>
+
+      <form id="login-form" class="space-y-5">
+        <div>
+          <label for="username" class="block text-sm font-medium text-neutral-700 mb-1.5">Username</label>
+          <input id="username" name="username" type="text" required autocomplete="username"
+            class="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all text-sm" />
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-neutral-700 mb-1.5">Password</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password"
+            placeholder="••••••••"
+            class="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all text-sm" />
+        </div>
+        <button type="submit" id="submit-btn"
+          class="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2">
+          <span id="btn-label">Sign In</span>
+          <svg id="btn-spinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+
+    <p class="text-center text-xs text-primary-200/60 mt-6">
+      Authorized personnel only. All activity is logged.
+    </p>
+  </div>
+
+  <script>
+    import { isAuthenticated, storeAuth } from '../scripts/auth.js';
+
+    if (isAuthenticated()) window.location.href = '/';
+
+    const form = document.getElementById('login-form');
+    const errorBanner = document.getElementById('error-banner');
+    const errorText = document.getElementById('error-text');
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+    const btnLabel = document.getElementById('btn-label');
+    const spinner = document.getElementById('btn-spinner');
+
+    function showError(msg: string) {
+      if (errorText) errorText.textContent = msg;
+      errorBanner?.classList.remove('hidden');
+      errorBanner?.classList.add('flex');
+    }
+    function setLoading(on: boolean) {
+      if (submitBtn) submitBtn.disabled = on;
+      if (btnLabel) btnLabel.textContent = on ? 'Signing in…' : 'Sign In';
+      spinner?.classList.toggle('hidden', !on);
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBanner?.classList.add('hidden');
+      errorBanner?.classList.remove('flex');
+      setLoading(true);
+
+      const username = (document.getElementById('username') as HTMLInputElement).value.trim();
+      const password = (document.getElementById('password') as HTMLInputElement).value;
+
+      try {
+        const res = await fetch('/.netlify/functions/auth-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showError(data.error || 'Invalid username or password.');
+          setLoading(false);
+          return;
+        }
+        storeAuth({ token: data.token, role: data.role, name: data.name, agentId: data.agentId });
+        window.location.href = '/';
+      } catch {
+        showError('Network error. Please try again.');
+        setLoading(false);
+      }
+    });
+  </script>
+
+</body>
+</html>

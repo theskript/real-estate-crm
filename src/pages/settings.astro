@@ -1,0 +1,134 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Settings" activeNav="settings">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+    <h1 class="text-2xl font-display font-bold text-neutral-900 mb-1">Settings</h1>
+    <p class="text-sm text-neutral-400 mb-5">Manage tags, lead sources, and import leads.</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Tags -->
+      <div class="bg-white rounded-2xl border border-neutral-200 p-5">
+        <h2 class="text-sm font-semibold text-neutral-900 mb-3">Lead Tags</h2>
+        <div id="tags-list" class="flex flex-wrap gap-2 mb-3"></div>
+        <div class="flex gap-2">
+          <input id="new-tag-name" placeholder="New tag name" class="flex-1 px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+          <input id="new-tag-color" type="color" value="#0e8a7d" class="w-10 h-10 rounded-lg border border-neutral-200 cursor-pointer" />
+          <button id="add-tag-btn" class="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-lg">Add</button>
+        </div>
+      </div>
+
+      <!-- Lead sources -->
+      <div class="bg-white rounded-2xl border border-neutral-200 p-5">
+        <h2 class="text-sm font-semibold text-neutral-900 mb-3">Lead Sources</h2>
+        <p class="text-xs text-neutral-400 mb-2">Comma-separated list shown as autocomplete suggestions when adding a lead.</p>
+        <textarea id="sources-input" rows="3" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm"></textarea>
+        <button id="save-sources-btn" class="mt-2 text-xs font-semibold text-primary-600 hover:text-primary-700">Save Sources</button>
+        <div id="owner-only-note" class="hidden text-xs text-neutral-400 mt-2">Only owners can edit tags and sources — ask your owner to make changes.</div>
+      </div>
+
+      <!-- CSV import -->
+      <div class="bg-white rounded-2xl border border-neutral-200 p-5 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-neutral-900 mb-1">Import Leads (CSV)</h2>
+        <p class="text-xs text-neutral-400 mb-3">Paste CSV content with a header row (e.g. exported from Zillow, Realtor.com, or another CRM). Map your columns below — duplicate emails/phones are skipped automatically.</p>
+        <textarea id="csv-input" rows="6" placeholder="first_name,last_name,email,phone&#10;Jane,Doe,jane@example.com,555-123-4567" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm font-mono text-xs mb-3"></textarea>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+          <input id="map-first-name" placeholder="Column: first_name *" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+          <input id="map-last-name" placeholder="Column: last_name" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+          <input id="map-email" placeholder="Column: email" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+          <input id="map-phone" placeholder="Column: phone" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+          <select id="default-lead-type" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+            <option value="buyer">Default: Buyer</option>
+            <option value="seller">Default: Seller</option>
+          </select>
+          <input id="default-source" placeholder="Default source" value="Import" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+        </div>
+        <button id="import-btn" class="px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-xl">Import Leads</button>
+        <div id="import-result" class="hidden mt-3 text-sm px-3 py-2 rounded-lg"></div>
+      </div>
+
+      <!-- Dialer (future) -->
+      <div class="bg-white rounded-2xl border border-dashed border-neutral-300 p-5 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-neutral-900 mb-1">Dialer Integration (Twilio)</h2>
+        <p class="text-xs text-neutral-500">Not yet connected. Once you add <code class="bg-neutral-100 px-1 rounded">TWILIO_ACCOUNT_SID</code>, <code class="bg-neutral-100 px-1 rounded">TWILIO_AUTH_TOKEN</code>, and <code class="bg-neutral-100 px-1 rounded">TWILIO_FROM</code> to your Netlify environment variables, the Call/Text buttons on each lead can be upgraded to place calls and send texts directly from the browser, with automatic call logging and recording. Ask your developer to enable this when you're ready.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, getRole, esc } from '../scripts/auth.js';
+    requireLogin();
+    const isOwner = getRole() === 'owner';
+    if (!isOwner) {
+      document.getElementById('owner-only-note')?.classList.remove('hidden');
+      ['add-tag-btn', 'save-sources-btn'].forEach(id => (document.getElementById(id) as HTMLButtonElement)?.setAttribute('disabled', 'true'));
+    }
+
+    async function loadTags() {
+      const { tags } = await apiFetch('tags');
+      document.getElementById('tags-list')!.innerHTML = tags.map((t: any) => `
+        <span class="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-semibold" style="background:${t.color}22;color:${t.color}">
+          ${esc(t.name)}
+          ${isOwner ? `<button data-id="${t.id}" class="delete-tag-btn hover:opacity-60">&times;</button>` : ''}
+        </span>`).join('') || '<span class="text-xs text-neutral-400">No tags yet</span>';
+      document.querySelectorAll('.delete-tag-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await apiFetch('tags', { method: 'DELETE', params: { id: (btn as HTMLElement).dataset.id } });
+          loadTags();
+        });
+      });
+    }
+    loadTags();
+
+    document.getElementById('add-tag-btn')?.addEventListener('click', async () => {
+      const name = (document.getElementById('new-tag-name') as HTMLInputElement).value.trim();
+      if (!name) return;
+      const color = (document.getElementById('new-tag-color') as HTMLInputElement).value;
+      await apiFetch('tags', { method: 'POST', body: { name, color } });
+      (document.getElementById('new-tag-name') as HTMLInputElement).value = '';
+      loadTags();
+    });
+
+    async function loadSources() {
+      const { settings } = await apiFetch('settings');
+      (document.getElementById('sources-input') as HTMLTextAreaElement).value = settings.lead_sources || '';
+    }
+    loadSources();
+    document.getElementById('save-sources-btn')?.addEventListener('click', async () => {
+      await apiFetch('settings', { method: 'PATCH', body: { lead_sources: (document.getElementById('sources-input') as HTMLTextAreaElement).value } });
+    });
+
+    document.getElementById('import-btn')?.addEventListener('click', async () => {
+      const resultEl = document.getElementById('import-result')!;
+      const csv = (document.getElementById('csv-input') as HTMLTextAreaElement).value.trim();
+      const firstNameCol = (document.getElementById('map-first-name') as HTMLInputElement).value.trim();
+      if (!csv || !firstNameCol) {
+        resultEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600';
+        resultEl.textContent = 'CSV content and the first_name column mapping are required.';
+        resultEl.classList.remove('hidden');
+        return;
+      }
+      const mapping: Record<string, string> = { first_name: firstNameCol };
+      const lastName = (document.getElementById('map-last-name') as HTMLInputElement).value.trim();
+      const email = (document.getElementById('map-email') as HTMLInputElement).value.trim();
+      const phone = (document.getElementById('map-phone') as HTMLInputElement).value.trim();
+      if (lastName) mapping.last_name = lastName;
+      if (email) mapping.email = email;
+      if (phone) mapping.phone = phone;
+      try {
+        const res = await apiFetch('import-leads', { method: 'POST', body: {
+          csv, mapping,
+          default_lead_type: (document.getElementById('default-lead-type') as HTMLSelectElement).value,
+          default_source: (document.getElementById('default-source') as HTMLInputElement).value.trim() || 'Import',
+        }});
+        resultEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+        resultEl.textContent = `Imported ${res.imported} of ${res.total} rows (${res.skipped} skipped as duplicates or missing name).`;
+        resultEl.classList.remove('hidden');
+      } catch (err: any) {
+        resultEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600';
+        resultEl.textContent = err.message;
+        resultEl.classList.remove('hidden');
+      }
+    });
+  </script>
+</AdminLayout>

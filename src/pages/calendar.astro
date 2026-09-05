@@ -1,0 +1,79 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Calendar" activeNav="calendar">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+    <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
+      <h1 class="text-2xl font-display font-bold text-neutral-900">Calendar</h1>
+      <div class="flex items-center gap-2">
+        <button id="prev-month" class="p-2 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-50">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <span id="month-label" class="text-sm font-semibold text-neutral-700 w-36 text-center">–</span>
+        <button id="next-month" class="p-2 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-50">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+      <div class="grid grid-cols-7 bg-neutral-50 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => <div class="px-2 py-2 text-center">{d}</div>)}
+      </div>
+      <div id="calendar-grid" class="grid grid-cols-7"></div>
+    </div>
+
+    <p class="text-xs text-neutral-400 mt-3">Showing tasks with a due date (showings, calls, follow-ups). Full listing-appointment scheduling can be added alongside a dialer/calendar-sync integration later.</p>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, esc } from '../scripts/auth.js';
+    requireLogin();
+
+    let cursor = new Date();
+    cursor.setDate(1);
+
+    function ymd(d: Date) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    async function render() {
+      document.getElementById('month-label')!.textContent = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const firstDay = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const startOffset = firstDay.getDay();
+      const gridStart = new Date(firstDay); gridStart.setDate(gridStart.getDate() - startOffset);
+
+      const { tasks } = await apiFetch('tasks', {});
+      const byDay: Record<string, any[]> = {};
+      for (const t of tasks) {
+        if (!t.due_at) continue;
+        const key = ymd(new Date(t.due_at));
+        (byDay[key] ||= []).push(t);
+      }
+
+      const todayKey = ymd(new Date());
+      let html = '';
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(gridStart); d.setDate(d.getDate() + i);
+        const key = ymd(d);
+        const inMonth = d.getMonth() === cursor.getMonth();
+        const items = byDay[key] || [];
+        html += `
+          <div class="min-h-[96px] border-t border-r border-neutral-100 p-1.5 ${inMonth ? '' : 'bg-neutral-50/60'}">
+            <div class="text-[11px] font-semibold mb-1 ${key === todayKey ? 'text-white bg-primary-600 w-5 h-5 rounded-full flex items-center justify-center' : inMonth ? 'text-neutral-500' : 'text-neutral-300'}">${d.getDate()}</div>
+            <div class="space-y-1">
+              ${items.slice(0, 3).map(t => `
+                <a href="${t.lead ? `/leads/detail?id=${t.lead.id}` : '/tasks'}" class="block truncate text-[10px] font-medium px-1.5 py-0.5 rounded ${t.status === 'completed' ? 'bg-neutral-100 text-neutral-400 line-through' : 'bg-primary-50 text-primary-700'}">${esc(t.title)}</a>
+              `).join('')}
+              ${items.length > 3 ? `<div class="text-[10px] text-neutral-400 px-1.5">+${items.length - 3} more</div>` : ''}
+            </div>
+          </div>`;
+      }
+      document.getElementById('calendar-grid')!.innerHTML = html;
+    }
+
+    document.getElementById('prev-month')?.addEventListener('click', () => { cursor.setMonth(cursor.getMonth() - 1); render(); });
+    document.getElementById('next-month')?.addEventListener('click', () => { cursor.setMonth(cursor.getMonth() + 1); render(); });
+    render();
+  </script>
+</AdminLayout>

@@ -1,0 +1,181 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Dashboard" activeNav="dashboard">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+
+    <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
+      <div>
+        <p id="greeting-label" class="text-xs font-semibold uppercase tracking-widest text-primary-600 mb-0.5">Loading…</p>
+        <h1 class="text-2xl font-display font-bold text-neutral-900">Dashboard</h1>
+        <p id="today-label" class="text-sm text-neutral-400 mt-0.5">Loading…</p>
+      </div>
+      <a href="/leads?compose=1"
+        class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shrink-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add Lead
+      </a>
+    </div>
+
+    <!-- Stats -->
+    <div id="stats-row" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      {Array.from({ length: 4 }).map(() => (
+        <div class="bg-white rounded-xl border border-neutral-200 px-4 py-4 animate-pulse">
+          <div class="h-3 bg-neutral-100 rounded w-20 mb-3"></div>
+          <div class="h-7 bg-neutral-100 rounded w-12 mb-1"></div>
+          <div class="h-3 bg-neutral-100 rounded w-24"></div>
+        </div>
+      ))}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <!-- Hot leads needing follow-up -->
+      <div class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-3.5 border-b border-neutral-100">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-hot-500"></span>
+              <h2 class="font-semibold text-neutral-900 text-sm">Hot Leads Needing Attention</h2>
+            </div>
+            <a href="/leads?temperature=hot" class="text-xs text-primary-600 hover:text-primary-700 font-medium">All hot &rarr;</a>
+          </div>
+          <div id="hot-list" class="divide-y divide-neutral-50">
+            <div class="px-5 py-8 text-center text-neutral-400 text-sm">Loading…</div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-3.5 border-b border-neutral-100">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-neutral-300"></span>
+              <h2 class="font-semibold text-neutral-900 text-sm">Pipeline Snapshot</h2>
+            </div>
+            <a href="/leads" class="text-xs text-primary-600 hover:text-primary-700 font-medium">View leads &rarr;</a>
+          </div>
+          <div id="pipeline-snapshot" class="p-5">
+            <div class="text-center text-neutral-400 text-sm py-6">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tasks due -->
+      <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden h-full flex flex-col">
+          <div class="flex items-center justify-between px-5 py-3.5 border-b border-neutral-100">
+            <h2 class="font-semibold text-neutral-900 text-sm">Follow-Up Queue</h2>
+            <a href="/tasks" class="text-xs text-primary-600 hover:text-primary-700 font-medium">All tasks &rarr;</a>
+          </div>
+          <div id="tasks-list" class="flex-1 divide-y divide-neutral-50 overflow-y-auto" style="max-height:560px">
+            <div class="px-5 py-8 text-center text-neutral-400 text-sm">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, formatDateTime, esc, initials, timeAgo } from '../scripts/auth.js';
+    import { STAGES, leadTypeBadge } from '../scripts/leadMeta.js';
+    requireLogin();
+
+    const hour = new Date().getHours();
+    const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    document.getElementById('greeting-label')!.textContent = greet;
+    document.getElementById('today-label')!.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    function statCard(label: string, value: string | number, sub: string, href = '', accent = '') {
+      const inner = `
+        <div class="text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-400 mb-2">${label}</div>
+        <div class="text-2xl font-bold text-neutral-900 leading-none mb-1">${value}</div>
+        <div class="text-xs text-neutral-400">${sub}</div>`;
+      return href
+        ? `<a href="${href}" class="block bg-white rounded-xl border border-neutral-200 px-4 py-4 hover:border-neutral-300 hover:shadow-sm transition-all ${accent}">${inner}</a>`
+        : `<div class="bg-white rounded-xl border border-neutral-200 px-4 py-4 ${accent}">${inner}</div>`;
+    }
+
+    function leadRow(lead: any) {
+      const name = `${lead.first_name} ${lead.last_name || ''}`.trim();
+      return `
+        <a href="/leads/detail?id=${lead.id}" class="flex items-center gap-3 px-5 py-3 hover:bg-neutral-50 transition-colors">
+          <div class="w-8 h-8 rounded-full bg-hot-100 text-hot-700 flex items-center justify-center text-[11px] font-bold shrink-0">${initials(name)}</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-neutral-900 truncate">${esc(name)}</div>
+            <div class="text-xs text-neutral-400 truncate">${esc(lead.phone || lead.email || 'No contact info')}</div>
+          </div>
+          <div class="flex flex-col items-end gap-1 shrink-0">
+            ${leadTypeBadge(lead.lead_type)}
+            <span class="text-[10px] text-neutral-400">${lead.last_contacted_at ? 'Contacted ' + timeAgo(lead.last_contacted_at) : 'Never contacted'}</span>
+          </div>
+        </a>`;
+    }
+
+    function taskRow(task: any) {
+      const lead = task.lead;
+      const overdue = task.due_at && new Date(task.due_at).getTime() < Date.now();
+      return `
+        <div class="flex items-start gap-3 px-5 py-3 hover:bg-neutral-50 transition-colors">
+          <button data-task-id="${task.id}" class="complete-task-btn mt-0.5 w-4 h-4 rounded border-2 border-neutral-300 hover:border-primary-500 shrink-0"></button>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-neutral-900 truncate">${esc(task.title)}</div>
+            ${lead ? `<a href="/leads/detail?id=${lead.id}" class="text-xs text-primary-600 hover:underline">${esc(lead.first_name + ' ' + (lead.last_name || ''))}</a>` : ''}
+          </div>
+          <div class="text-[11px] font-medium shrink-0 ${overdue ? 'text-hot-600' : 'text-neutral-400'}">${task.due_at ? formatDateTime(task.due_at) : 'No due date'}</div>
+        </div>`;
+    }
+
+    async function load() {
+      try {
+        const { stats } = await apiFetch('dashboard-stats');
+        document.getElementById('stats-row')!.innerHTML = [
+          statCard('Open Leads', stats.open_leads, `${stats.buyer_leads} buyer · ${stats.seller_leads} seller`, '/leads'),
+          statCard('Hot Leads', stats.hot_leads, stats.stale_hot_leads ? `${stats.stale_hot_leads} not contacted in 24h` : 'All caught up', '/leads?temperature=hot', 'border-l-4 border-hot-400'),
+          statCard('Overdue Follow-ups', stats.overdue_followups, 'Need attention', '/leads', stats.overdue_followups ? 'border-l-4 border-warm-400' : ''),
+          statCard('Closed Won', stats.closed_won, 'All-time', '/leads?stage=closed_won', 'border-l-4 border-emerald-400'),
+        ].join('');
+
+        const stageEntries = STAGES.filter(s => !['closed_won','closed_lost'].includes(s.id));
+        const max = Math.max(1, ...stageEntries.map(s => stats.by_stage[s.id] || 0));
+        document.getElementById('pipeline-snapshot')!.innerHTML = stageEntries.map(s => {
+          const count = stats.by_stage[s.id] || 0;
+          const pct = Math.round((count / max) * 100);
+          return `
+            <div class="mb-3 last:mb-0">
+              <div class="flex items-center justify-between text-xs mb-1">
+                <span class="font-medium text-neutral-600">${s.label}</span>
+                <span class="text-neutral-400">${count}</span>
+              </div>
+              <div class="h-2 rounded-full bg-neutral-100 overflow-hidden">
+                <div class="h-full bg-primary-500 rounded-full" style="width:${pct}%"></div>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (err) {
+        console.error(err);
+      }
+
+      try {
+        const { leads } = await apiFetch('leads', { params: { temperature: 'hot' } });
+        const openHot = leads.filter((l: any) => !['closed_won','closed_lost'].includes(l.stage)).slice(0, 8);
+        document.getElementById('hot-list')!.innerHTML = openHot.length
+          ? openHot.map(leadRow).join('')
+          : `<div class="px-5 py-8 text-center text-neutral-400 text-sm">No hot leads right now 🎉</div>`;
+      } catch (err) { console.error(err); }
+
+      try {
+        const { tasks } = await apiFetch('tasks', { params: { status: 'pending' } });
+        const sorted = tasks.slice(0, 15);
+        document.getElementById('tasks-list')!.innerHTML = sorted.length
+          ? sorted.map(taskRow).join('')
+          : `<div class="px-5 py-8 text-center text-neutral-400 text-sm">Nothing due — nice work!</div>`;
+        document.querySelectorAll('.complete-task-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = (btn as HTMLElement).dataset.taskId;
+            await apiFetch('tasks', { method: 'PATCH', params: { id }, body: { status: 'completed' } });
+            load();
+          });
+        });
+      } catch (err) { console.error(err); }
+    }
+    load();
+  </script>
+</AdminLayout>

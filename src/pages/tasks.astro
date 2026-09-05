@@ -1,0 +1,84 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Tasks" activeNav="tasks">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+    <div class="flex items-start justify-between gap-4 mb-5 flex-wrap">
+      <div>
+        <h1 class="text-2xl font-display font-bold text-neutral-900">Follow-Up Queue</h1>
+        <p class="text-sm text-neutral-400 mt-0.5">Every task across your book, sorted by due date.</p>
+      </div>
+      <div class="flex bg-neutral-200 rounded-lg p-1 text-sm">
+        <button id="tab-overdue" class="task-tab px-3 py-1.5 rounded-md font-medium transition-colors">Overdue</button>
+        <button id="tab-today" class="task-tab px-3 py-1.5 rounded-md font-medium transition-colors">Today</button>
+        <button id="tab-upcoming" class="task-tab px-3 py-1.5 rounded-md font-medium transition-colors">Upcoming</button>
+        <button id="tab-completed" class="task-tab px-3 py-1.5 rounded-md font-medium transition-colors">Completed</button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+      <div id="task-list" class="divide-y divide-neutral-50">
+        <div class="px-5 py-10 text-center text-neutral-400 text-sm">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, esc, formatDateTime } from '../scripts/auth.js';
+    requireLogin();
+
+    let tab = 'overdue';
+    function setTab(t: string) {
+      tab = t;
+      document.querySelectorAll('.task-tab').forEach(b => {
+        const active = b.id === `tab-${t}`;
+        b.classList.toggle('bg-white', active);
+        b.classList.toggle('shadow-sm', active);
+      });
+      load();
+    }
+    ['overdue', 'today', 'upcoming', 'completed'].forEach(t => document.getElementById(`tab-${t}`)?.addEventListener('click', () => setTab(t)));
+
+    function taskRow(t: any) {
+      const lead = t.lead;
+      const overdue = t.due_at && new Date(t.due_at).getTime() < Date.now() && t.status === 'pending';
+      return `
+        <div class="flex items-start gap-3 px-5 py-3.5 hover:bg-neutral-50 transition-colors">
+          <input type="checkbox" data-task-id="${t.id}" class="task-check mt-1 w-4 h-4 rounded border-neutral-300 text-primary-600" ${t.status === 'completed' ? 'checked' : ''} />
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium ${t.status === 'completed' ? 'line-through text-neutral-400' : 'text-neutral-900'} truncate">${esc(t.title)}</div>
+            <div class="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
+              ${lead ? `<a href="/leads/detail?id=${lead.id}" class="text-primary-600 hover:underline">${esc(lead.first_name + ' ' + (lead.last_name || ''))}</a><span>·</span>` : ''}
+              <span class="capitalize">${t.task_type.replace('_', ' ')}</span>
+              ${t.agent ? `<span>· ${esc(t.agent.name)}</span>` : ''}
+            </div>
+          </div>
+          <div class="text-xs font-medium shrink-0 ${overdue ? 'text-hot-600' : 'text-neutral-400'}">${t.due_at ? formatDateTime(t.due_at) : 'No due date'}</div>
+        </div>`;
+    }
+
+    async function load() {
+      const { tasks } = await apiFetch('tasks', { params: tab === 'completed' ? { status: 'completed' } : { status: 'pending' } });
+      const now = Date.now();
+      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
+
+      let filtered = tasks;
+      if (tab === 'overdue') filtered = tasks.filter((t: any) => t.due_at && new Date(t.due_at).getTime() < now);
+      else if (tab === 'today') filtered = tasks.filter((t: any) => t.due_at && new Date(t.due_at) >= startOfToday && new Date(t.due_at) <= endOfToday);
+      else if (tab === 'upcoming') filtered = tasks.filter((t: any) => !t.due_at || new Date(t.due_at) > endOfToday);
+
+      document.getElementById('task-list')!.innerHTML = filtered.length
+        ? filtered.map(taskRow).join('')
+        : `<div class="px-5 py-10 text-center text-neutral-400 text-sm">Nothing here</div>`;
+
+      document.querySelectorAll('.task-check').forEach(cb => {
+        cb.addEventListener('change', async (e: any) => {
+          await apiFetch('tasks', { method: 'PATCH', params: { id: cb.getAttribute('data-task-id') }, body: { status: e.target.checked ? 'completed' : 'pending' } });
+          load();
+        });
+      });
+    }
+    setTab('overdue');
+  </script>
+</AdminLayout>

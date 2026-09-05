@@ -1,0 +1,49 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Audit Log" activeNav="audit">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+    <h1 class="text-2xl font-display font-bold text-neutral-900 mb-1">Audit Log</h1>
+    <p class="text-sm text-neutral-400 mb-5">Every login, create, update, and delete across the CRM.</p>
+
+    <div id="not-owner" class="hidden bg-white rounded-2xl border border-neutral-200 p-10 text-center text-neutral-400">Owner access required.</div>
+
+    <div id="log-table" class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-50 text-neutral-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold">Action</th>
+              <th class="text-left px-4 py-3 font-semibold">User</th>
+              <th class="text-left px-4 py-3 font-semibold hidden md:table-cell">Details</th>
+              <th class="text-left px-4 py-3 font-semibold">When</th>
+            </tr>
+          </thead>
+          <tbody id="log-body" class="divide-y divide-neutral-100">
+            <tr><td colspan="4" class="px-4 py-10 text-center text-neutral-400">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, getRole, esc, formatDateTime } from '../scripts/auth.js';
+    requireLogin();
+    if (getRole() !== 'owner') {
+      document.getElementById('not-owner')?.classList.remove('hidden');
+      document.getElementById('log-table')?.classList.add('hidden');
+    } else {
+      (async () => {
+        const { entries } = await apiFetch('audit');
+        document.getElementById('log-body')!.innerHTML = entries.length ? entries.map((e: any) => `
+          <tr>
+            <td class="px-4 py-3 font-medium text-neutral-800">${esc(e.action)}</td>
+            <td class="px-4 py-3 text-neutral-600">${esc(e.username)} <span class="text-neutral-400 capitalize">(${e.role})</span></td>
+            <td class="px-4 py-3 hidden md:table-cell text-neutral-500 truncate max-w-xs">${esc(e.details || '')}</td>
+            <td class="px-4 py-3 text-neutral-400 text-xs">${formatDateTime(e.created_at)}</td>
+          </tr>`).join('') : `<tr><td colspan="4" class="px-4 py-10 text-center text-neutral-400">No activity yet</td></tr>`;
+      })();
+    }
+  </script>
+</AdminLayout>

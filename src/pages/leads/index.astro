@@ -1,0 +1,419 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Leads" activeNav="leads">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+
+    <div class="flex items-start justify-between gap-4 mb-5 flex-wrap">
+      <div>
+        <h1 class="text-2xl font-display font-bold text-neutral-900">Leads</h1>
+        <p id="lead-count-label" class="text-sm text-neutral-400 mt-0.5">Loading…</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex bg-neutral-200 rounded-lg p-1 text-sm">
+          <button id="view-table-btn" class="view-btn px-3 py-1.5 rounded-md font-medium transition-colors">Table</button>
+          <button id="view-kanban-btn" class="view-btn px-3 py-1.5 rounded-md font-medium transition-colors">Kanban</button>
+        </div>
+        <button id="open-compose-btn" class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Add Lead
+        </button>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl border border-neutral-200 p-3 mb-5 flex flex-wrap gap-2 items-center">
+      <input id="f-search" type="text" placeholder="Search name, email, phone…" class="flex-1 min-w-[180px] px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+      <select id="f-type" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+        <option value="">All Types</option>
+        <option value="buyer">Buyer</option>
+        <option value="seller">Seller</option>
+      </select>
+      <select id="f-temp" class="px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+        <option value="">All Temps</option>
+        <option value="hot">🔥 Hot</option>
+        <option value="warm">🌤️ Warm</option>
+        <option value="cold">❄️ Cold</option>
+      </select>
+      <select id="f-stage" class="stage-filter px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+        <option value="">All Stages</option>
+      </select>
+      <select id="f-agent" class="agent-filter hidden px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+        <option value="">All Agents</option>
+      </select>
+    </div>
+
+    <!-- Table view -->
+    <div id="table-view" class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-50 text-neutral-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold">Name</th>
+              <th class="text-left px-4 py-3 font-semibold">Type</th>
+              <th class="text-left px-4 py-3 font-semibold">Temp</th>
+              <th class="text-left px-4 py-3 font-semibold">Stage</th>
+              <th class="text-left px-4 py-3 font-semibold hidden md:table-cell">Source</th>
+              <th class="text-left px-4 py-3 font-semibold hidden lg:table-cell">Agent</th>
+              <th class="text-left px-4 py-3 font-semibold hidden lg:table-cell">Last Contact</th>
+            </tr>
+          </thead>
+          <tbody id="leads-table-body" class="divide-y divide-neutral-100">
+            <tr><td colspan="7" class="px-4 py-10 text-center text-neutral-400">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Kanban view -->
+    <div id="kanban-view" class="hidden overflow-x-auto pb-4">
+      <div id="kanban-columns" class="flex gap-3 min-w-max"></div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Lead slide-over -->
+  <div id="compose-overlay" class="hidden fixed inset-0 bg-black/30 z-40"></div>
+  <div id="compose-panel" class="hidden fixed inset-y-0 right-0 w-full sm:w-[480px] bg-white shadow-2xl border-l border-neutral-200 z-50 flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-100 shrink-0">
+      <h3 class="font-semibold text-neutral-900">Add Lead</h3>
+      <button id="close-compose-btn" class="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="compose-form" class="flex-1 overflow-y-auto p-6 space-y-4">
+      <input type="hidden" id="c-id" />
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">First Name *</label>
+          <input id="c-first-name" required class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Last Name</label>
+          <input id="c-last-name" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Email</label>
+          <input id="c-email" type="email" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Phone</label>
+          <input id="c-phone" type="tel" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Lead Type *</label>
+          <select id="c-lead-type" required class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+            <option value="buyer">Buyer</option>
+            <option value="seller">Seller</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Temperature</label>
+          <select id="c-temperature" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+            <option value="hot">🔥 Hot</option>
+            <option value="warm" selected>🌤️ Warm</option>
+            <option value="cold">❄️ Cold</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-neutral-600 mb-1">Source</label>
+        <input id="c-source" list="source-options" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        <datalist id="source-options"></datalist>
+      </div>
+
+      <div id="buyer-fields" class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Budget Min</label>
+          <input id="c-budget-min" type="number" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Budget Max</label>
+          <input id="c-budget-max" type="number" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Desired Area</label>
+          <input id="c-desired-area" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+      </div>
+
+      <div id="seller-fields" class="hidden grid grid-cols-2 gap-3">
+        <div class="col-span-2">
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Property Address</label>
+          <input id="c-property-address" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-xs font-medium text-neutral-600 mb-1">Listing Price Expectation</label>
+          <input id="c-listing-price" type="number" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+        </div>
+      </div>
+
+      <div id="c-agent-wrap" class="hidden">
+        <label class="block text-xs font-medium text-neutral-600 mb-1">Assign To</label>
+        <select id="c-agent" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white"></select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-neutral-600 mb-1">Next Follow-up</label>
+        <input id="c-next-follow-up" type="datetime-local" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-neutral-600 mb-1">Notes</label>
+        <textarea id="c-notes" rows="3" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none"></textarea>
+      </div>
+
+      <div id="compose-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+    </form>
+    <div class="px-6 py-4 border-t border-neutral-100 shrink-0">
+      <button id="save-compose-btn" class="w-full py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl transition-colors text-sm">Save Lead</button>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, getRole, esc, initials } from '../../scripts/auth.js';
+    import { STAGES, temperatureBadge, leadTypeBadge, stageBadge, TEMPERATURE_META } from '../../scripts/leadMeta.js';
+    requireLogin();
+    const role = getRole();
+    const isOwner = role === 'owner';
+
+    STAGES.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id; opt.textContent = s.label;
+      document.querySelector('.stage-filter')!.appendChild(opt);
+    });
+
+    const params = new URLSearchParams(location.search);
+    (document.getElementById('f-type') as HTMLSelectElement).value = params.get('lead_type') || '';
+    (document.getElementById('f-temp') as HTMLSelectElement).value = params.get('temperature') || '';
+    (document.getElementById('f-stage') as HTMLSelectElement).value = params.get('stage') || '';
+
+    let agents: any[] = [];
+    let sources: string[] = [];
+
+    async function loadLookups() {
+      try {
+        const { agents: a } = await apiFetch('agents');
+        agents = a.filter((x: any) => x.active);
+        if (isOwner) {
+          document.querySelectorAll('.agent-filter').forEach(el => el.classList.remove('hidden'));
+          const filterSel = document.getElementById('f-agent') as HTMLSelectElement;
+          agents.forEach(ag => filterSel.appendChild(new Option(ag.name, ag.id)));
+          const composeSel = document.getElementById('c-agent') as HTMLSelectElement;
+          agents.forEach(ag => composeSel.appendChild(new Option(ag.name, ag.id)));
+          document.getElementById('c-agent-wrap')?.classList.remove('hidden');
+        }
+      } catch {}
+      try {
+        const { settings } = await apiFetch('settings');
+        sources = (settings.lead_sources || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+      } catch {}
+    }
+
+    function leadTableRow(lead: any) {
+      const name = `${lead.first_name} ${lead.last_name || ''}`.trim();
+      return `
+        <tr class="hover:bg-neutral-50 cursor-pointer transition-colors" data-href="/leads/detail?id=${lead.id}">
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[11px] font-bold shrink-0">${initials(name)}</div>
+              <div class="min-w-0">
+                <div class="font-medium text-neutral-900 truncate">${esc(name)}</div>
+                <div class="text-xs text-neutral-400 truncate">${esc(lead.phone || lead.email || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td class="px-4 py-3">${leadTypeBadge(lead.lead_type)}</td>
+          <td class="px-4 py-3">${temperatureBadge(lead.temperature)}</td>
+          <td class="px-4 py-3">${stageBadge(lead.stage)}</td>
+          <td class="px-4 py-3 hidden md:table-cell text-neutral-500">${esc(lead.source || '—')}</td>
+          <td class="px-4 py-3 hidden lg:table-cell text-neutral-500">${esc(lead.agent?.name || 'Unassigned')}</td>
+          <td class="px-4 py-3 hidden lg:table-cell text-neutral-400 text-xs">${lead.last_contacted_at ? new Date(lead.last_contacted_at).toLocaleDateString() : 'Never'}</td>
+        </tr>`;
+    }
+
+    function kanbanCard(lead: any) {
+      const name = `${lead.first_name} ${lead.last_name || ''}`.trim();
+      const m = (TEMPERATURE_META as any)[lead.temperature] || TEMPERATURE_META.warm;
+      return `
+        <a href="/leads/detail?id=${lead.id}" draggable="true" data-lead-id="${lead.id}"
+           class="kanban-card block bg-white rounded-xl border border-neutral-200 p-3 mb-2 hover:shadow-md hover:border-neutral-300 transition-all cursor-grab active:cursor-grabbing ring-1 ${m.ring}">
+          <div class="flex items-center justify-between mb-1.5">
+            ${leadTypeBadge(lead.lead_type)}
+            ${temperatureBadge(lead.temperature)}
+          </div>
+          <div class="text-sm font-semibold text-neutral-900 truncate">${esc(name)}</div>
+          <div class="text-xs text-neutral-400 truncate mt-0.5">${esc(lead.phone || lead.email || 'No contact info')}</div>
+          ${lead.agent ? `<div class="text-[10px] text-neutral-400 mt-1.5">${esc(lead.agent.name)}</div>` : ''}
+        </a>`;
+    }
+
+    function renderKanban(leads: any[]) {
+      const cols = STAGES.map(s => {
+        const stageLeads = leads.filter(l => l.stage === s.id);
+        return `
+          <div class="kanban-col w-72 shrink-0 bg-neutral-100 rounded-xl flex flex-col max-h-[calc(100vh-260px)]" data-stage="${s.id}">
+            <div class="px-3 py-2.5 flex items-center justify-between shrink-0">
+              <span class="text-xs font-bold text-neutral-600 uppercase tracking-wide">${s.label}</span>
+              <span class="text-[10px] font-bold bg-white text-neutral-500 px-1.5 py-0.5 rounded-full">${stageLeads.length}</span>
+            </div>
+            <div class="kanban-drop flex-1 overflow-y-auto px-2 pb-2" data-stage="${s.id}">
+              ${stageLeads.map(kanbanCard).join('') || '<div class="text-center text-xs text-neutral-400 py-6">No leads</div>'}
+            </div>
+          </div>`;
+      }).join('');
+      document.getElementById('kanban-columns')!.innerHTML = cols;
+      wireDragDrop();
+    }
+
+    function wireDragDrop() {
+      let draggedId: string | null = null;
+      document.querySelectorAll('.kanban-card').forEach(card => {
+        card.addEventListener('dragstart', (e: any) => {
+          draggedId = card.getAttribute('data-lead-id');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+      });
+      document.querySelectorAll('.kanban-drop').forEach(zone => {
+        zone.addEventListener('dragover', (e: any) => { e.preventDefault(); zone.classList.add('bg-primary-50'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('bg-primary-50'));
+        zone.addEventListener('drop', async (e: any) => {
+          e.preventDefault();
+          zone.classList.remove('bg-primary-50');
+          const newStage = zone.getAttribute('data-stage');
+          if (!draggedId || !newStage) return;
+          try {
+            await apiFetch('leads', { method: 'PATCH', params: { id: draggedId }, body: { stage: newStage } });
+            loadLeads();
+          } catch (err: any) { alert(err.message); }
+        });
+      });
+    }
+
+    let currentView = localStorage.getItem('teaka_lead_view') || 'table';
+    function setView(v: string) {
+      currentView = v;
+      localStorage.setItem('teaka_lead_view', v);
+      document.getElementById('table-view')!.classList.toggle('hidden', v !== 'table');
+      document.getElementById('kanban-view')!.classList.toggle('hidden', v !== 'kanban');
+      document.getElementById('view-table-btn')!.classList.toggle('bg-white', v === 'table');
+      document.getElementById('view-table-btn')!.classList.toggle('shadow-sm', v === 'table');
+      document.getElementById('view-kanban-btn')!.classList.toggle('bg-white', v === 'kanban');
+      document.getElementById('view-kanban-btn')!.classList.toggle('shadow-sm', v === 'kanban');
+      document.querySelector('.stage-filter')!.classList.toggle('hidden', v === 'kanban');
+    }
+    document.getElementById('view-table-btn')?.addEventListener('click', () => setView('table'));
+    document.getElementById('view-kanban-btn')?.addEventListener('click', () => setView('kanban'));
+    setView(currentView);
+
+    async function loadLeads() {
+      const query: Record<string, string> = {
+        lead_type: (document.getElementById('f-type') as HTMLSelectElement).value,
+        temperature: (document.getElementById('f-temp') as HTMLSelectElement).value,
+        search: (document.getElementById('f-search') as HTMLInputElement).value,
+      };
+      if (currentView === 'table') query.stage = (document.getElementById('f-stage') as HTMLSelectElement).value;
+      if (isOwner) query.assigned_agent_id = (document.getElementById('f-agent') as HTMLSelectElement).value;
+
+      try {
+        const { leads } = await apiFetch('leads', { params: query });
+        document.getElementById('lead-count-label')!.textContent = `${leads.length} lead${leads.length === 1 ? '' : 's'}`;
+        document.getElementById('leads-table-body')!.innerHTML = leads.length
+          ? leads.map(leadTableRow).join('')
+          : `<tr><td colspan="7" class="px-4 py-10 text-center text-neutral-400">No leads match your filters</td></tr>`;
+        document.querySelectorAll('#leads-table-body tr[data-href]').forEach(row => {
+          row.addEventListener('click', () => { location.href = (row as HTMLElement).dataset.href!; });
+        });
+        renderKanban(leads);
+      } catch (err: any) {
+        console.error(err);
+      }
+    }
+
+    let searchTimeout: any;
+    document.getElementById('f-search')?.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(loadLeads, 300);
+    });
+    ['f-type', 'f-temp', 'f-stage', 'f-agent'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', loadLeads);
+    });
+
+    // ── Compose (add lead) panel ──────────────────────────────────────────────
+    const overlay = document.getElementById('compose-overlay');
+    const panel = document.getElementById('compose-panel');
+    function openCompose() {
+      (document.getElementById('compose-form') as HTMLFormElement).reset();
+      (document.getElementById('c-id') as HTMLInputElement).value = '';
+      document.getElementById('compose-error')?.classList.add('hidden');
+      overlay?.classList.remove('hidden');
+      panel?.classList.remove('hidden');
+      const dl = document.getElementById('source-options')!;
+      dl.innerHTML = sources.map(s => `<option value="${esc(s)}"></option>`).join('');
+    }
+    function closeCompose() {
+      overlay?.classList.add('hidden');
+      panel?.classList.add('hidden');
+    }
+    document.getElementById('open-compose-btn')?.addEventListener('click', openCompose);
+    document.getElementById('close-compose-btn')?.addEventListener('click', closeCompose);
+    overlay?.addEventListener('click', closeCompose);
+
+    document.getElementById('c-lead-type')?.addEventListener('change', (e: any) => {
+      const isBuyer = e.target.value === 'buyer';
+      document.getElementById('buyer-fields')!.classList.toggle('hidden', !isBuyer);
+      document.getElementById('seller-fields')!.classList.toggle('hidden', isBuyer);
+    });
+
+    document.getElementById('save-compose-btn')?.addEventListener('click', async () => {
+      const errorEl = document.getElementById('compose-error')!;
+      errorEl.classList.add('hidden');
+      const firstName = (document.getElementById('c-first-name') as HTMLInputElement).value.trim();
+      if (!firstName) {
+        errorEl.textContent = 'First name is required.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      const body: any = {
+        first_name: firstName,
+        last_name: (document.getElementById('c-last-name') as HTMLInputElement).value.trim() || null,
+        email: (document.getElementById('c-email') as HTMLInputElement).value.trim() || null,
+        phone: (document.getElementById('c-phone') as HTMLInputElement).value.trim() || null,
+        lead_type: (document.getElementById('c-lead-type') as HTMLSelectElement).value,
+        temperature: (document.getElementById('c-temperature') as HTMLSelectElement).value,
+        source: (document.getElementById('c-source') as HTMLInputElement).value.trim() || null,
+        notes: (document.getElementById('c-notes') as HTMLTextAreaElement).value.trim() || null,
+        next_follow_up_at: (document.getElementById('c-next-follow-up') as HTMLInputElement).value || null,
+      };
+      if (body.lead_type === 'buyer') {
+        body.budget_min = (document.getElementById('c-budget-min') as HTMLInputElement).value || null;
+        body.budget_max = (document.getElementById('c-budget-max') as HTMLInputElement).value || null;
+        body.desired_area = (document.getElementById('c-desired-area') as HTMLInputElement).value.trim() || null;
+      } else {
+        body.property_address = (document.getElementById('c-property-address') as HTMLInputElement).value.trim() || null;
+        body.listing_price_expectation = (document.getElementById('c-listing-price') as HTMLInputElement).value || null;
+      }
+      if (isOwner) {
+        const agentVal = (document.getElementById('c-agent') as HTMLSelectElement).value;
+        if (agentVal) body.assigned_agent_id = agentVal;
+      }
+      try {
+        await apiFetch('leads', { method: 'POST', body });
+        closeCompose();
+        loadLeads();
+      } catch (err: any) {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove('hidden');
+      }
+    });
+
+    (async () => {
+      await loadLookups();
+      loadLeads();
+      if (params.get('compose') === '1') openCompose();
+    })();
+  </script>
+</AdminLayout>

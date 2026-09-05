@@ -1,0 +1,343 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Lead Detail" activeNav="leads">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+    <a href="/leads" class="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-800 mb-4 transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to Leads
+    </a>
+
+    <div id="not-found" class="hidden bg-white rounded-2xl border border-neutral-200 p-10 text-center text-neutral-400">
+      Lead not found, or it's not assigned to you.
+    </div>
+
+    <div id="lead-content" class="hidden">
+      <!-- Header -->
+      <div class="bg-white rounded-2xl border border-neutral-200 p-5 mb-4">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <div id="lead-avatar" class="w-12 h-12 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-bold shrink-0">–</div>
+            <div class="min-w-0">
+              <h1 id="lead-name" class="text-xl font-display font-bold text-neutral-900 truncate">Loading…</h1>
+              <div id="lead-badges" class="flex items-center gap-1.5 mt-1 flex-wrap"></div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <a id="call-btn" href="#" class="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+              Call
+            </a>
+            <a id="text-btn" href="#" class="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold rounded-lg transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+              Text
+            </a>
+            <a id="email-btn" href="#" class="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold rounded-lg transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Email
+            </a>
+            <button id="delete-lead-btn" class="hidden inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition-colors">Delete</button>
+          </div>
+        </div>
+        <p id="dialer-hint" class="text-[11px] text-neutral-400 mt-3">📞 Uses your device's default calling app. Connect Twilio in Settings to enable in-browser dialing, call recording &amp; automatic logging.</p>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-neutral-100">
+          <div>
+            <label class="block text-[10px] font-semibold uppercase tracking-wide text-neutral-400 mb-1">Temperature</label>
+            <select id="f-temperature" class="w-full px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs font-semibold bg-white">
+              <option value="hot">🔥 Hot</option>
+              <option value="warm">🌤️ Warm</option>
+              <option value="cold">❄️ Cold</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-semibold uppercase tracking-wide text-neutral-400 mb-1">Stage</label>
+            <select id="f-stage" class="w-full px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs font-semibold bg-white"></select>
+          </div>
+          <div id="agent-select-wrap" class="hidden">
+            <label class="block text-[10px] font-semibold uppercase tracking-wide text-neutral-400 mb-1">Assigned To</label>
+            <select id="f-agent" class="w-full px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs font-semibold bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-semibold uppercase tracking-wide text-neutral-400 mb-1">Next Follow-up</label>
+            <input id="f-next-follow-up" type="datetime-local" class="w-full px-2.5 py-1.5 rounded-lg border border-neutral-200 text-xs font-semibold" />
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Left: contact info, notes, timeline -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="bg-white rounded-2xl border border-neutral-200 p-5">
+            <h2 class="text-sm font-semibold text-neutral-900 mb-3">Contact &amp; Deal Info</h2>
+            <div id="deal-info" class="grid grid-cols-2 gap-3 text-sm"></div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-neutral-200 p-5">
+            <h2 class="text-sm font-semibold text-neutral-900 mb-3">Notes</h2>
+            <textarea id="f-notes" rows="3" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none"></textarea>
+            <button id="save-notes-btn" class="mt-2 text-xs font-semibold text-primary-600 hover:text-primary-700">Save Notes</button>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-neutral-100">
+              <h2 class="text-sm font-semibold text-neutral-900">Activity Timeline</h2>
+              <button id="log-activity-btn" class="text-xs font-semibold text-primary-600 hover:text-primary-700">+ Log Activity</button>
+            </div>
+            <div id="activity-form" class="hidden px-5 py-4 border-b border-neutral-100 bg-neutral-50 space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <select id="a-type" class="px-2.5 py-2 rounded-lg border border-neutral-200 text-xs bg-white">
+                  <option value="call">Call</option>
+                  <option value="sms">Text</option>
+                  <option value="email">Email</option>
+                  <option value="note">Note</option>
+                  <option value="showing">Showing</option>
+                  <option value="meeting">Meeting</option>
+                </select>
+                <select id="a-direction" class="px-2.5 py-2 rounded-lg border border-neutral-200 text-xs bg-white">
+                  <option value="outbound">Outbound</option>
+                  <option value="inbound">Inbound</option>
+                </select>
+              </div>
+              <textarea id="a-body" rows="2" placeholder="What happened?" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm"></textarea>
+              <div class="flex justify-end gap-2">
+                <button id="cancel-activity-btn" class="px-3 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-700">Cancel</button>
+                <button id="save-activity-btn" class="px-3 py-1.5 text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white rounded-lg">Save</button>
+              </div>
+            </div>
+            <div id="activity-list" class="divide-y divide-neutral-50 max-h-[480px] overflow-y-auto">
+              <div class="px-5 py-8 text-center text-neutral-400 text-sm">Loading…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: tasks, tags -->
+        <div class="space-y-4">
+          <div class="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-neutral-100">
+              <h2 class="text-sm font-semibold text-neutral-900">Tasks</h2>
+              <button id="add-task-btn" class="text-xs font-semibold text-primary-600 hover:text-primary-700">+ Add</button>
+            </div>
+            <div id="task-form" class="hidden px-5 py-4 border-b border-neutral-100 bg-neutral-50 space-y-2">
+              <input id="t-title" placeholder="Task title" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+              <input id="t-due" type="datetime-local" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+              <div class="flex justify-end gap-2">
+                <button id="cancel-task-btn" class="px-3 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-700">Cancel</button>
+                <button id="save-task-btn" class="px-3 py-1.5 text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white rounded-lg">Save</button>
+              </div>
+            </div>
+            <div id="task-list" class="divide-y divide-neutral-50">
+              <div class="px-5 py-6 text-center text-neutral-400 text-sm">Loading…</div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-neutral-200 p-5">
+            <h2 class="text-sm font-semibold text-neutral-900 mb-3">Tags</h2>
+            <div id="tags-editor" class="flex flex-wrap gap-1.5"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, getRole, esc, initials, formatDateTime, timeAgo } from '../../scripts/auth.js';
+    import { STAGES, temperatureBadge, leadTypeBadge, stageBadge } from '../../scripts/leadMeta.js';
+    requireLogin();
+    const isOwner = getRole() === 'owner';
+    const leadId = new URLSearchParams(location.search).get('id');
+    if (!leadId) location.href = '/leads';
+
+    let lead: any = null;
+    let allTags: any[] = [];
+    let agents: any[] = [];
+
+    STAGES.forEach(s => (document.getElementById('f-stage') as HTMLSelectElement).appendChild(new Option(s.label, s.id)));
+
+    function toLocalInput(iso: string | null) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    }
+
+    function renderHeader() {
+      const name = `${lead.first_name} ${lead.last_name || ''}`.trim();
+      document.getElementById('lead-name')!.textContent = name;
+      (document.getElementById('lead-avatar') as HTMLElement).textContent = initials(name);
+      document.getElementById('lead-badges')!.innerHTML = leadTypeBadge(lead.lead_type) + temperatureBadge(lead.temperature) + stageBadge(lead.stage);
+
+      const phone = lead.phone ? lead.phone.replace(/[^\d+]/g, '') : '';
+      const callBtn = document.getElementById('call-btn') as HTMLAnchorElement;
+      const textBtn = document.getElementById('text-btn') as HTMLAnchorElement;
+      const emailBtn = document.getElementById('email-btn') as HTMLAnchorElement;
+      if (phone) { callBtn.href = `tel:${phone}`; textBtn.href = `sms:${phone}`; }
+      else { callBtn.classList.add('opacity-40', 'pointer-events-none'); textBtn.classList.add('opacity-40', 'pointer-events-none'); }
+      if (lead.email) emailBtn.href = `mailto:${lead.email}`;
+      else emailBtn.classList.add('opacity-40', 'pointer-events-none');
+
+      (document.getElementById('f-temperature') as HTMLSelectElement).value = lead.temperature;
+      (document.getElementById('f-stage') as HTMLSelectElement).value = lead.stage;
+      (document.getElementById('f-next-follow-up') as HTMLInputElement).value = toLocalInput(lead.next_follow_up_at);
+      (document.getElementById('f-notes') as HTMLTextAreaElement).value = lead.notes || '';
+
+      if (isOwner) {
+        document.getElementById('agent-select-wrap')?.classList.remove('hidden');
+        document.getElementById('delete-lead-btn')?.classList.remove('hidden');
+        const sel = document.getElementById('f-agent') as HTMLSelectElement;
+        sel.innerHTML = '<option value="">Unassigned</option>' + agents.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+        sel.value = lead.assigned_agent_id || '';
+      }
+
+      const info: Array<[string, string]> = [
+        ['Email', lead.email || '—'],
+        ['Phone', lead.phone || '—'],
+        ['Source', lead.source || '—'],
+      ];
+      if (lead.lead_type === 'buyer') {
+        info.push(['Budget', lead.budget_min || lead.budget_max ? `$${(lead.budget_min || 0).toLocaleString()} – $${(lead.budget_max || 0).toLocaleString()}` : '—']);
+        info.push(['Desired Area', lead.desired_area || '—']);
+      } else {
+        info.push(['Property Address', lead.property_address || '—']);
+        info.push(['List Price Expectation', lead.listing_price_expectation ? `$${Number(lead.listing_price_expectation).toLocaleString()}` : '—']);
+      }
+      document.getElementById('deal-info')!.innerHTML = info.map(([k, v]) => `
+        <div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">${k}</div>
+          <div class="text-neutral-800 truncate">${esc(v)}</div>
+        </div>`).join('');
+
+      renderTags();
+    }
+
+    function renderTags() {
+      const leadTagIds = new Set(lead.tags.map((t: any) => t.id));
+      document.getElementById('tags-editor')!.innerHTML = allTags.map(t => `
+        <button data-tag-id="${t.id}" class="tag-toggle px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors"
+          style="${leadTagIds.has(t.id) ? `background:${t.color}22;color:${t.color};border-color:${t.color}55` : 'background:#fff;color:#94a3b8;border-color:#e2e8f0'}">
+          ${esc(t.name)}
+        </button>`).join('') || '<span class="text-xs text-neutral-400">No tags yet — add some in Settings</span>';
+
+      document.querySelectorAll('.tag-toggle').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const tagId = (btn as HTMLElement).dataset.tagId!;
+          const current = new Set(lead.tags.map((t: any) => t.id));
+          current.has(tagId) ? current.delete(tagId) : current.add(tagId);
+          const { lead: updated } = await apiFetch('leads', { method: 'PATCH', params: { id: leadId }, body: { tag_ids: [...current] } });
+          lead = updated;
+          renderTags();
+        });
+      });
+    }
+
+    async function loadActivities() {
+      const { activities } = await apiFetch('activities', { params: { lead_id: leadId } });
+      const ICONS: Record<string, string> = { call: '📞', sms: '💬', email: '✉️', note: '📝', showing: '🏠', meeting: '🤝', status_change: '🔄' };
+      document.getElementById('activity-list')!.innerHTML = activities.length ? activities.map((a: any) => `
+        <div class="px-5 py-3 flex gap-3">
+          <div class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-sm shrink-0">${ICONS[a.type] || '•'}</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 text-xs text-neutral-400">
+              <span class="font-semibold text-neutral-700 capitalize">${a.type.replace('_', ' ')}</span>
+              ${a.direction ? `<span class="capitalize">${a.direction}</span>` : ''}
+              <span>·</span><span>${timeAgo(a.created_at)}</span>
+              ${a.agent ? `<span>· ${esc(a.agent.name)}</span>` : ''}
+            </div>
+            ${a.body ? `<div class="text-sm text-neutral-700 mt-0.5">${esc(a.body)}</div>` : ''}
+          </div>
+        </div>`).join('') : `<div class="px-5 py-8 text-center text-neutral-400 text-sm">No activity logged yet</div>`;
+    }
+
+    async function loadTasks() {
+      const { tasks } = await apiFetch('tasks', { params: { lead_id: leadId } });
+      document.getElementById('task-list')!.innerHTML = tasks.length ? tasks.map((t: any) => `
+        <div class="flex items-start gap-2.5 px-5 py-3">
+          <input type="checkbox" data-task-id="${t.id}" class="task-check mt-1 w-4 h-4 rounded border-neutral-300 text-primary-600" ${t.status === 'completed' ? 'checked' : ''} />
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium ${t.status === 'completed' ? 'line-through text-neutral-400' : 'text-neutral-900'} truncate">${esc(t.title)}</div>
+            <div class="text-xs text-neutral-400">${t.due_at ? formatDateTime(t.due_at) : 'No due date'}</div>
+          </div>
+        </div>`).join('') : `<div class="px-5 py-6 text-center text-neutral-400 text-sm">No tasks yet</div>`;
+
+      document.querySelectorAll('.task-check').forEach(cb => {
+        cb.addEventListener('change', async (e: any) => {
+          await apiFetch('tasks', { method: 'PATCH', params: { id: cb.getAttribute('data-task-id') }, body: { status: e.target.checked ? 'completed' : 'pending' } });
+          loadTasks();
+        });
+      });
+    }
+
+    async function load() {
+      try {
+        const { agents: a } = await apiFetch('agents');
+        agents = a.filter((x: any) => x.active);
+      } catch {}
+      try {
+        const { tags } = await apiFetch('tags');
+        allTags = tags;
+      } catch {}
+      try {
+        const res = await apiFetch('leads', { params: { id: leadId } });
+        lead = res.lead;
+      } catch {
+        document.getElementById('not-found')?.classList.remove('hidden');
+        return;
+      }
+      document.getElementById('lead-content')?.classList.remove('hidden');
+      renderHeader();
+      loadActivities();
+      loadTasks();
+    }
+    load();
+
+    // Field auto-save on change
+    async function patchLead(fields: any) {
+      const { lead: updated } = await apiFetch('leads', { method: 'PATCH', params: { id: leadId }, body: fields });
+      lead = updated;
+      renderHeader();
+    }
+    document.getElementById('f-temperature')?.addEventListener('change', (e: any) => patchLead({ temperature: e.target.value }));
+    document.getElementById('f-stage')?.addEventListener('change', (e: any) => patchLead({ stage: e.target.value }));
+    document.getElementById('f-agent')?.addEventListener('change', (e: any) => patchLead({ assigned_agent_id: e.target.value || null }));
+    document.getElementById('f-next-follow-up')?.addEventListener('change', (e: any) => patchLead({ next_follow_up_at: e.target.value || null }));
+    document.getElementById('save-notes-btn')?.addEventListener('click', () => patchLead({ notes: (document.getElementById('f-notes') as HTMLTextAreaElement).value }));
+
+    document.getElementById('delete-lead-btn')?.addEventListener('click', async () => {
+      if (!confirm('Delete this lead permanently? This cannot be undone.')) return;
+      await apiFetch('leads', { method: 'DELETE', params: { id: leadId } });
+      location.href = '/leads';
+    });
+
+    // Activity form
+    const activityForm = document.getElementById('activity-form');
+    document.getElementById('log-activity-btn')?.addEventListener('click', () => activityForm?.classList.toggle('hidden'));
+    document.getElementById('cancel-activity-btn')?.addEventListener('click', () => activityForm?.classList.add('hidden'));
+    document.getElementById('save-activity-btn')?.addEventListener('click', async () => {
+      await apiFetch('activities', { method: 'POST', body: {
+        lead_id: leadId,
+        type: (document.getElementById('a-type') as HTMLSelectElement).value,
+        direction: (document.getElementById('a-direction') as HTMLSelectElement).value,
+        body: (document.getElementById('a-body') as HTMLTextAreaElement).value.trim() || null,
+      }});
+      (document.getElementById('a-body') as HTMLTextAreaElement).value = '';
+      activityForm?.classList.add('hidden');
+      loadActivities();
+    });
+
+    // Task form
+    const taskForm = document.getElementById('task-form');
+    document.getElementById('add-task-btn')?.addEventListener('click', () => taskForm?.classList.toggle('hidden'));
+    document.getElementById('cancel-task-btn')?.addEventListener('click', () => taskForm?.classList.add('hidden'));
+    document.getElementById('save-task-btn')?.addEventListener('click', async () => {
+      const title = (document.getElementById('t-title') as HTMLInputElement).value.trim();
+      if (!title) return;
+      await apiFetch('tasks', { method: 'POST', body: {
+        lead_id: leadId, title,
+        due_at: (document.getElementById('t-due') as HTMLInputElement).value || null,
+      }});
+      (document.getElementById('t-title') as HTMLInputElement).value = '';
+      taskForm?.classList.add('hidden');
+      loadTasks();
+    });
+  </script>
+</AdminLayout>

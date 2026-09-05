@@ -1,0 +1,125 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Agents" activeNav="agents">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-screen-2xl">
+    <div class="flex items-start justify-between gap-4 mb-5 flex-wrap">
+      <div>
+        <h1 class="text-2xl font-display font-bold text-neutral-900">Team</h1>
+        <p class="text-sm text-neutral-400 mt-0.5">Manage agents, roles, and access.</p>
+      </div>
+      <button id="open-compose-btn" class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add Agent
+      </button>
+    </div>
+
+    <div id="not-owner" class="hidden bg-white rounded-2xl border border-neutral-200 p-10 text-center text-neutral-400">Owner access required.</div>
+
+    <div id="agent-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="col-span-full text-center text-neutral-400 py-10">Loading…</div>
+    </div>
+  </div>
+
+  <div id="compose-overlay" class="hidden fixed inset-0 bg-black/30 z-40"></div>
+  <div id="compose-panel" class="hidden fixed inset-y-0 right-0 w-full sm:w-[420px] bg-white shadow-2xl border-l border-neutral-200 z-50 flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-100 shrink-0">
+      <h3 class="font-semibold text-neutral-900">Add Agent</h3>
+      <button id="close-compose-btn" class="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-100">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-6 space-y-3">
+      <input id="c-name" placeholder="Full name *" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+      <input id="c-username" placeholder="Username *" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+      <input id="c-email" type="email" placeholder="Email" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+      <input id="c-phone" type="tel" placeholder="Phone" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+      <input id="c-password" type="password" placeholder="Temporary password *" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm" />
+      <select id="c-role" class="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white">
+        <option value="agent">Agent</option>
+        <option value="owner">Owner</option>
+      </select>
+      <div id="compose-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+    </div>
+    <div class="px-6 py-4 border-t border-neutral-100 shrink-0">
+      <button id="save-compose-btn" class="w-full py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl text-sm">Save Agent</button>
+    </div>
+  </div>
+
+  <script>
+    import { requireLogin, apiFetch, getRole, esc, initials } from '../scripts/auth.js';
+    requireLogin();
+    if (getRole() !== 'owner') {
+      document.getElementById('not-owner')?.classList.remove('hidden');
+      document.getElementById('agent-grid')?.classList.add('hidden');
+      document.getElementById('open-compose-btn')?.classList.add('hidden');
+    }
+
+    function agentCard(a: any) {
+      return `
+        <div class="bg-white rounded-2xl border border-neutral-200 p-5">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style="background:${a.avatar_color || '#0e8a7d'}">${initials(a.name)}</div>
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-neutral-900 truncate">${esc(a.name)}</div>
+              <div class="text-xs text-neutral-400 truncate">@${esc(a.username)} · <span class="capitalize">${a.role}</span></div>
+            </div>
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${a.active ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-100 text-neutral-400'}">${a.active ? 'Active' : 'Inactive'}</span>
+          </div>
+          <div class="mt-3 pt-3 border-t border-neutral-100 text-xs text-neutral-500 space-y-1">
+            <div>${esc(a.email || 'No email')}</div>
+            <div>${esc(a.phone || 'No phone')}</div>
+          </div>
+          <button data-id="${a.id}" data-active="${a.active}" class="toggle-active-btn mt-3 w-full text-xs font-semibold py-1.5 rounded-lg ${a.active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">
+            ${a.active ? 'Deactivate' : 'Reactivate'}
+          </button>
+        </div>`;
+    }
+
+    async function load() {
+      const { agents } = await apiFetch('agents');
+      document.getElementById('agent-grid')!.innerHTML = agents.map(agentCard).join('');
+      document.querySelectorAll('.toggle-active-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          const active = (btn as HTMLElement).dataset.active === 'true';
+          if (active) await apiFetch('agents', { method: 'DELETE', params: { id } });
+          else await apiFetch('agents', { method: 'PATCH', params: { id }, body: { active: true } });
+          load();
+        });
+      });
+    }
+    if (getRole() === 'owner') load();
+
+    const overlay = document.getElementById('compose-overlay');
+    const panel = document.getElementById('compose-panel');
+    document.getElementById('open-compose-btn')?.addEventListener('click', () => { overlay?.classList.remove('hidden'); panel?.classList.remove('hidden'); });
+    document.getElementById('close-compose-btn')?.addEventListener('click', () => { overlay?.classList.add('hidden'); panel?.classList.add('hidden'); });
+    overlay?.addEventListener('click', () => { overlay?.classList.add('hidden'); panel?.classList.add('hidden'); });
+
+    document.getElementById('save-compose-btn')?.addEventListener('click', async () => {
+      const errorEl = document.getElementById('compose-error')!;
+      const body = {
+        name: (document.getElementById('c-name') as HTMLInputElement).value.trim(),
+        username: (document.getElementById('c-username') as HTMLInputElement).value.trim(),
+        email: (document.getElementById('c-email') as HTMLInputElement).value.trim() || null,
+        phone: (document.getElementById('c-phone') as HTMLInputElement).value.trim() || null,
+        password: (document.getElementById('c-password') as HTMLInputElement).value,
+        role: (document.getElementById('c-role') as HTMLSelectElement).value,
+      };
+      if (!body.name || !body.username || !body.password) {
+        errorEl.textContent = 'Name, username, and password are required.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      try {
+        await apiFetch('agents', { method: 'POST', body });
+        panel?.classList.add('hidden'); overlay?.classList.add('hidden');
+        load();
+      } catch (err: any) {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove('hidden');
+      }
+    });
+  </script>
+</AdminLayout>
