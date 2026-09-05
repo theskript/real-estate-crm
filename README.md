@@ -125,7 +125,22 @@ npm run dev
 The CRM will be available at `http://localhost:4321`. Netlify Functions run
 locally too (via the Astro/Netlify dev integration) — no separate server needed.
 
-## 5. Deploy to Netlify
+## 5. Load realistic demo data (optional, for demoing)
+
+```bash
+node scripts/seed-demo-data.cjs
+```
+
+Populates real Supabase (not the SQLite fallback) with 3 agents, 18 buyer/seller
+leads across every temperature and pipeline stage, 8 properties, buyer-property
+matches, activity timelines, follow-up tasks (overdue/today/upcoming/completed),
+and audit log history — enough for every page to look genuinely in use. Log in
+as `sarah.chen` / `marcus.torres` / `priya.patel`, password `Demo1234!`.
+
+Safe to re-run: it aborts if demo agents already exist, or pass `--reset` to
+wipe and regenerate the same dataset fresh (e.g. before a demo call).
+
+## 6. Deploy to Netlify
 
 1. Push this repo to GitHub/GitLab/Bitbucket and "Import an existing project" in Netlify, or run `netlify deploy` with the Netlify CLI.
 2. In **Site settings → Environment variables**, add the same variables from your `.env` file.
@@ -143,6 +158,7 @@ locally too (via the Astro/Netlify dev integration) — no separate server neede
 - **Audit log**: owner-only trail of every login/create/update/delete
 - **Settings**: tags, lead sources, CSV lead import with duplicate detection
 - **Dashboard**: open/hot/overdue stats, pipeline funnel, hot-lead alert list, follow-up queue
+- **Demo data**: one-command realistic seed script for demoing (see step 5 above)
 
 ## What's intentionally deferred (roadmap)
 
@@ -175,6 +191,7 @@ teaka-crm/
 ├── db/schema.sqlite.sql              # SQLite-equivalent schema (fallback)
 ├── scripts/
 │   ├── run-supabase-schema.cjs       # applies supabase/schema.sql via SUPABASE_DB_URL
+│   ├── seed-demo-data.cjs            # populates realistic demo data (see step 5)
 │   └── smoke-test-sqlite.cjs         # regression test for the SQLite fallback
 └── netlify.toml
 ```
