@@ -67,6 +67,25 @@ completely unchanged** either way.
    - **service_role key** (NOT the `anon` key — keep this secret, server-side only) → `SUPABASE_SERVICE_ROLE_KEY`
 3. Open the **SQL Editor** (left sidebar) → **New query**, paste the entire contents of [supabase/schema.sql](supabase/schema.sql), and run it. This creates every table (agents, leads, activities, tasks, properties, tags, audit_log, settings) plus indexes and starter tags/lead sources.
 
+   **Or apply it automatically instead of copy-pasting:**
+   ```bash
+   npm install
+   cp .env.local.example .env.local   # if it doesn't exist yet
+   # edit .env.local and set SUPABASE_DB_URL to your Session pooler connection string
+   node scripts/run-supabase-schema.cjs
+   ```
+   Get the connection string from Supabase → **Connect** button (top of the
+   dashboard, next to the project/branch selector) → **Connection String**
+   tab → **Session pooler** (not "Direct connection" — that one is IPv6-only
+   and won't resolve on most home/office networks; Session pooler works over
+   plain IPv4). Swap in your real database password for the `[YOUR-PASSWORD]`
+   placeholder. `.env.local` is gitignored — this password never gets
+   committed, and never needs to be shared in chat/screenshots either.
+
+   `pg` is a devDependency used only by this one-off script — the running app
+   never talks to Postgres directly, only through Supabase's REST API (or the
+   SQLite fallback).
+
 ## 2. Configure environment variables
 
 Copy `.env.example` to `.env` and fill in:
@@ -150,6 +169,28 @@ teaka-crm/
 │   └── pages/                        # login, dashboard, leads, tasks, calendar,
 │                                      # properties, agents, audit, settings
 ├── netlify/functions/                # one .cjs file per resource (leads, tasks, …)
-├── supabase/schema.sql               # full DB schema + RLS
+│   ├── _utils.cjs                    # auth/JWT/audit/CORS + getSupabase() DB switch
+│   └── _sqlite.cjs                   # local SQLite fallback (see below)
+├── supabase/schema.sql               # full Postgres schema + RLS
+├── db/schema.sqlite.sql              # SQLite-equivalent schema (fallback)
+├── scripts/
+│   ├── run-supabase-schema.cjs       # applies supabase/schema.sql via SUPABASE_DB_URL
+│   └── smoke-test-sqlite.cjs         # regression test for the SQLite fallback
 └── netlify.toml
 ```
+
+## Troubleshooting
+
+- **Everything on a page says "Loading…" forever** — a function call is
+  failing silently. Open the browser console/network tab; the real error
+  usually points to one of:
+  - `SUPABASE_URL` still set to the placeholder in `.env` (delete/blank it out
+    if you want the SQLite fallback, or fill in the real value)
+  - Schema not yet applied to Supabase (`Could not find the table '...' in the
+    schema cache` — see step 1 above)
+  - Stale dev server — `.env` is only read once at process start; after
+    editing it, fully restart (`npx astro dev stop` then `npm run dev`)
+- **`fetch failed` / DNS errors talking to Supabase** — almost always the
+  `.env` `SUPABASE_URL` placeholder still being present, or (for the migration
+  script) using the "Direct connection" string instead of "Session pooler".
+
