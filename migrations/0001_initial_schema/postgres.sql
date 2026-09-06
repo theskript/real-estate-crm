@@ -1,6 +1,9 @@
 -- ============================================================================
--- Teaka CRM — Supabase schema
--- Run this once in the Supabase SQL Editor (Dashboard → SQL Editor → New query)
+-- Teaka CRM — migration 0001: initial schema (Postgres/Supabase)
+--
+-- Applied automatically by `node scripts/migrate.cjs --target=postgres`
+-- (tracked in a `schema_migrations` table so it's safe to re-run). See
+-- migrations/README.md for how to add the next migration.
 -- ============================================================================
 
 create extension if not exists pgcrypto;

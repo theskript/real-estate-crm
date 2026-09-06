@@ -65,15 +65,15 @@ completely unchanged** either way.
 2. Once the project finishes provisioning, open **Project Settings → API**. You'll need two values:
    - **Project URL** → `SUPABASE_URL`
    - **service_role key** (NOT the `anon` key — keep this secret, server-side only) → `SUPABASE_SERVICE_ROLE_KEY`
-3. Open the **SQL Editor** (left sidebar) → **New query**, paste the entire contents of [supabase/schema.sql](supabase/schema.sql), and run it. This creates every table (agents, leads, activities, tasks, properties, tags, audit_log, settings) plus indexes and starter tags/lead sources.
-
-   **Or apply it automatically instead of copy-pasting:**
+3. Apply the schema — either paste [migrations/0001_initial_schema/postgres.sql](migrations/0001_initial_schema/postgres.sql) into the **SQL Editor** (left sidebar → New query → Run), or apply it automatically:
    ```bash
    npm install
    cp .env.local.example .env.local   # if it doesn't exist yet
    # edit .env.local and set SUPABASE_DB_URL to your Session pooler connection string
-   node scripts/run-supabase-schema.cjs
+   node scripts/migrate.cjs --target=postgres
    ```
+   This creates every table (agents, leads, activities, tasks, properties, tags, audit_log, settings) plus indexes and starter tags/lead sources, tracked in a `schema_migrations` table so it's safe to re-run — see [migrations/README.md](migrations/README.md) for how future schema changes work.
+
    Get the connection string from Supabase → **Connect** button (top of the
    dashboard, next to the project/branch selector) → **Connection String**
    tab → **Session pooler** (not "Direct connection" — that one is IPv6-only
@@ -82,7 +82,7 @@ completely unchanged** either way.
    placeholder. `.env.local` is gitignored — this password never gets
    committed, and never needs to be shared in chat/screenshots either.
 
-   `pg` is a devDependency used only by this one-off script — the running app
+   `pg` is a devDependency used only by this migration script — the running app
    never talks to Postgres directly, only through Supabase's REST API (or the
    SQLite fallback).
 
@@ -187,14 +187,31 @@ teaka-crm/
 ├── netlify/functions/                # one .cjs file per resource (leads, tasks, …)
 │   ├── _utils.cjs                    # auth/JWT/audit/CORS + getSupabase() DB switch
 │   └── _sqlite.cjs                   # local SQLite fallback (see below)
-├── supabase/schema.sql               # full Postgres schema + RLS
-├── db/schema.sqlite.sql              # SQLite-equivalent schema (fallback)
+├── migrations/                       # versioned schema changes (see migrations/README.md)
+│   └── 0001_initial_schema/postgres.sql, sqlite.sql
+├── tests/                            # vitest suite — exercises real handlers against SQLite
 ├── scripts/
-│   ├── run-supabase-schema.cjs       # applies supabase/schema.sql via SUPABASE_DB_URL
+│   ├── migrate.cjs                   # applies migrations/ to Postgres or SQLite
 │   ├── seed-demo-data.cjs            # populates realistic demo data (see step 5)
-│   └── smoke-test-sqlite.cjs         # regression test for the SQLite fallback
+│   └── smoke-test-sqlite.cjs         # manual end-to-end smoke test for the SQLite fallback
+├── .github/workflows/ci.yml          # runs `npm test` + `npm run build` on every push/PR
 └── netlify.toml
 ```
+
+## Testing & CI
+
+```bash
+npm test
+```
+
+Runs the automated suite in `tests/` (vitest) against the SQLite fallback —
+no Supabase account or network access needed, so it's fast and safe to run
+constantly. It exercises the real `netlify/functions/*.cjs` handlers
+end-to-end (not mocks), covering auth, per-agent access control, lead/task/
+activity CRUD, and the nested-embed join logic in `_sqlite.cjs` (this exact
+class of bug — silent empty/null joins — was found and fixed once already;
+the tests guard against it recurring). `.github/workflows/ci.yml` runs this
+plus `npm run build` on every push/PR to `main`/`dev`.
 
 ## Troubleshooting
 

@@ -1,11 +1,10 @@
 -- ============================================================================
--- Teaka CRM — SQLite fallback schema
+-- Teaka CRM — migration 0001: initial schema (SQLite fallback)
 --
--- This is a drop-in local replacement for supabase/schema.sql, used
--- automatically (see netlify/functions/_sqlite.cjs) whenever SUPABASE_URL
--- isn't configured — e.g. while Supabase is down, or before you've created a
--- project. It is executed once, automatically, against data/teaka.sqlite the
--- first time any function runs. You do not need to run this by hand.
+-- Applied automatically by netlify/functions/_sqlite.cjs the first time any
+-- function runs against the local SQLite fallback (tracked in a
+-- `schema_migrations` table). You do not need to run this by hand. See
+-- migrations/README.md for how to add the next migration.
 --
 -- Notes vs. the Postgres schema:
 --   - `id` columns use a SQLite DEFAULT expression that generates a v4-style

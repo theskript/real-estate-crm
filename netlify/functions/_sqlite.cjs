@@ -8,7 +8,8 @@
  * Used automatically whenever SUPABASE_URL isn't configured (see
  * _utils.cjs#getSupabase), e.g. while Supabase is down or before you've
  * created a project. Data lives in data/teaka.sqlite (gitignored), which is
- * created and seeded automatically from db/schema.sqlite.sql on first use.
+ * created and migrated automatically from migrations/*\/sqlite.sql on first
+ * use (see migrations/README.md).
  *
  * This is NOT a generic ORM — it only implements the exact query shapes
  * (filters, embeds/joins) actually used in this codebase. The relationship
@@ -23,40 +24,52 @@ const Database = require('better-sqlite3');
 // NOTE: dev/production function bundlers (esbuild) inline this file's code
 // directly into each handler's bundle, so `__dirname` at runtime points at a
 // generated/copied bundle directory — NOT this file's real location in
-// netlify/functions/. We can't rely on it to find db/schema.sqlite.sql or
+// netlify/functions/. We can't rely on it to find migrations/ or
 // data/teaka.sqlite. Instead, walk up from a few candidate starting points
-// until we find the project root (identified by containing db/schema.sqlite.sql).
+// until we find the project root (identified by containing migration 0001).
 function findProjectRoot() {
   const candidates = [process.cwd(), __dirname];
   for (const start of candidates) {
     let dir = start;
     for (let i = 0; i < 8; i++) {
-      if (fs.existsSync(path.join(dir, 'db', 'schema.sqlite.sql'))) return dir;
+      if (fs.existsSync(path.join(dir, 'migrations', '0001_initial_schema', 'sqlite.sql'))) return dir;
       const parent = path.dirname(dir);
       if (parent === dir) break;
       dir = parent;
     }
   }
-  throw new Error('Could not locate db/schema.sqlite.sql — is the project structure intact?');
+  throw new Error('Could not locate migrations/0001_initial_schema/sqlite.sql — is the project structure intact?');
 }
 
 const PROJECT_ROOT = findProjectRoot();
-const DB_PATH = path.join(PROJECT_ROOT, 'data', 'teaka.sqlite');
-const SCHEMA_PATH = path.join(PROJECT_ROOT, 'db', 'schema.sqlite.sql');
+// SQLITE_DB_PATH lets tests point at an isolated temp file instead of the real dev database.
+const DB_PATH = process.env.SQLITE_DB_PATH || path.join(PROJECT_ROOT, 'data', 'teaka.sqlite');
+const MIGRATIONS_DIR = path.join(PROJECT_ROOT, 'migrations');
 
 let dbInstance = null;
 const tableColumnsCache = new Map();
 
+/** Applies any migration not yet recorded in schema_migrations, in order. Safe/cheap to call on every connect. */
+function applyPendingMigrations(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))");
+  const applied = new Set(db.prepare('SELECT name FROM schema_migrations').all().map(r => r.name));
+  const names = fs.readdirSync(MIGRATIONS_DIR).filter(f => fs.statSync(path.join(MIGRATIONS_DIR, f)).isDirectory()).sort();
+  for (const name of names) {
+    if (applied.has(name)) continue;
+    const sqlPath = path.join(MIGRATIONS_DIR, name, 'sqlite.sql');
+    if (!fs.existsSync(sqlPath)) continue;
+    db.exec(fs.readFileSync(sqlPath, 'utf8'));
+    db.prepare('INSERT INTO schema_migrations (name) VALUES (?)').run(name);
+  }
+}
+
 function getDb() {
   if (dbInstance) return dbInstance;
-  const isNew = !fs.existsSync(DB_PATH);
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   dbInstance = new Database(DB_PATH);
   dbInstance.pragma('journal_mode = WAL');
   dbInstance.pragma('foreign_keys = ON');
-  if (isNew) {
-    dbInstance.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
-  }
+  applyPendingMigrations(dbInstance);
   return dbInstance;
 }
 
@@ -404,4 +417,10 @@ function getSqliteDB() {
   return { from: (table) => new QueryBuilder(db, table) };
 }
 
-module.exports = { getSqliteDB };
+/** Closes and clears the cached connection — used by tests to force a fresh DB on the next getSqliteDB() call. */
+function resetDb() {
+  if (dbInstance) { dbInstance.close(); dbInstance = null; }
+  tableColumnsCache.clear();
+}
+
+module.exports = { getSqliteDB, resetDb };
