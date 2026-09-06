@@ -1,6 +1,6 @@
 'use strict';
 
-const { requireAuth, getSupabase, cors } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors } = require('./_utils.cjs');
 
 const CORS = cors('GET');
 
@@ -15,9 +15,9 @@ exports.handler = async (event) => {
   const sb = getSupabase();
   const isOwner = user.role === 'owner';
 
-  let leadsQuery = sb.from('leads').select('id,lead_type,temperature,stage,next_follow_up_at,last_contacted_at,created_at,assigned_agent_id');
+  let leadsQuery = scopedTable(sb, user, 'leads').select('id,lead_type,temperature,stage,next_follow_up_at,last_contacted_at,created_at,assigned_agent_id');
   if (!isOwner) leadsQuery = leadsQuery.eq('assigned_agent_id', user.sub);
-  let tasksQuery = sb.from('tasks').select('id,status,due_at,agent_id').eq('status', 'pending');
+  let tasksQuery = scopedTable(sb, user, 'tasks').select('id,status,due_at,agent_id').eq('status', 'pending');
   if (!isOwner) tasksQuery = tasksQuery.eq('agent_id', user.sub);
 
   const [{ data: leads, error: le }, { data: tasks, error: te }] = await Promise.all([leadsQuery, tasksQuery]);

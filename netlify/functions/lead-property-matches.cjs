@@ -1,6 +1,6 @@
 'use strict';
 
-const { requireAuth, getSupabase, cors, logAudit, getClientIP } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors, logAudit, getClientIP } = require('./_utils.cjs');
 
 const CORS = cors('POST, PATCH, DELETE');
 
@@ -22,11 +22,11 @@ exports.handler = async (event) => {
     }
     const { lead_id, property_id, status = 'interested' } = body;
     if (!lead_id || !property_id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'lead_id and property_id are required' }) };
-    const { data, error } = await sb.from('lead_property_matches')
+    const { data, error } = await scopedTable(sb, user, 'lead_property_matches')
       .upsert({ lead_id, property_id, status }, { onConflict: 'lead_id,property_id' })
       .select().single();
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
-    await logAudit({ action: 'Add Buyer Match', username: user.username, role: user.role, details: `${lead_id} ↔ ${property_id}`, ip });
+    await logAudit({ action: 'Add Buyer Match', username: user.username, role: user.role, details: `${lead_id} ↔ ${property_id}`, ip, organizationId: user.organization_id });
     return { statusCode: 201, headers: CORS, body: JSON.stringify({ match: data }) };
   }
 
@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     try { body = JSON.parse(event.body || '{}'); } catch {
       return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Invalid JSON' }) };
     }
-    const { data, error } = await sb.from('lead_property_matches').update(body).eq('id', id).select().single();
+    const { data, error } = await scopedTable(sb, user, 'lead_property_matches').update(body).eq('id', id).select().single();
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ match: data }) };
   }
@@ -45,7 +45,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'DELETE') {
     const id = q.id;
     if (!id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'id is required' }) };
-    const { error } = await sb.from('lead_property_matches').delete().eq('id', id);
+    const { error } = await scopedTable(sb, user, 'lead_property_matches').delete().eq('id', id);
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
   }

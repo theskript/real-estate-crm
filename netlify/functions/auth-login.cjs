@@ -29,48 +29,44 @@ exports.handler = async (event) => {
     return { statusCode: 401, headers: CORS, body: JSON.stringify({ error: 'Invalid username or password' }) };
   };
 
-  // 1. agents table lookup
-  try {
-    const { data: agent } = await getSupabase()
-      .from('agents')
-      .select('*')
-      .ilike('username', username.replace(/'/g, ''))
-      .maybeSingle();
+  // Agents table lookup. Note: username stays GLOBALLY unique across all
+  // organizations (not per-org) — since one agent belongs to exactly one
+  // organization (no multi-org membership), this keeps login unambiguous
+  // with no org-picker step needed. There is intentionally no bootstrap/
+  // env-var login fallback here anymore: every login must resolve to a real
+  // agents row with a real organization_id. New organizations are created
+  // via `node scripts/provision-tenant.cjs`, not via a login-time bypass.
+  const { data: agent, error: lookupErr } = await getSupabase()
+    .from('agents')
+    .select('*')
+    .ilike('username', username.replace(/'/g, ''))
+    .maybeSingle();
 
-    if (agent) {
-      if (!agent.active) {
-        await logAudit({ action: 'Failed Login', username, role: agent.role || '', details: 'Account is deactivated', ip });
-        return deny();
-      }
-      const match = await bcrypt.compare(password, agent.password_hash || '');
-      if (!match) {
-        await logAudit({ action: 'Failed Login', username, role: agent.role || '', details: 'Wrong password', ip });
-        return deny();
-      }
-      const role = agent.role || 'agent';
-      const name = agent.name || username;
-
-      getSupabase().from('agents').update({ last_login: new Date().toISOString() }).eq('id', agent.id).then(() => {});
-      await logAudit({ action: 'Login', username, role, details: `Successful login — ${name}`, ip });
-
-      const expiresIn = role === 'owner' ? 86400 : 28800;
-      const token = jwtSign({ sub: agent.id, role, username, name }, secret, expiresIn);
-      return { statusCode: 200, headers: CORS, body: JSON.stringify({ token, role, name, agentId: agent.id, expiresIn }) };
-    }
-  } catch (err) {
-    console.warn('[login] Supabase agents lookup failed, falling back to env var:', err.message);
+  if (lookupErr) {
+    console.error('[login] agents lookup failed:', lookupErr.message);
+    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'Server error during login' }) };
   }
-
-  // 2. Owner env var bootstrap fallback (until the first `agents` row exists)
-  if (!process.env.ADMIN_PASSWORD) {
-    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'Server not configured: no agents row or ADMIN_PASSWORD set' }) };
+  if (!agent) {
+    await logAudit({ action: 'Failed Login', username, role: '', details: 'No matching account', ip });
+    return deny();
   }
-  if (username === 'owner' && password === process.env.ADMIN_PASSWORD) {
-    await logAudit({ action: 'Login', username: 'owner', role: 'owner', details: 'Login via ADMIN_PASSWORD env var (bootstrap)', ip });
-    const token = jwtSign({ sub: 'bootstrap-owner', role: 'owner', username: 'owner', name: 'Owner' }, secret, 86400);
-    return { statusCode: 200, headers: CORS, body: JSON.stringify({ token, role: 'owner', name: 'Owner', agentId: null, expiresIn: 86400 }) };
+  if (!agent.active) {
+    await logAudit({ action: 'Failed Login', username, role: agent.role || '', details: 'Account is deactivated', ip, organizationId: agent.organization_id });
+    return deny();
   }
+  const match = await bcrypt.compare(password, agent.password_hash || '');
+  if (!match) {
+    await logAudit({ action: 'Failed Login', username, role: agent.role || '', details: 'Wrong password', ip, organizationId: agent.organization_id });
+    return deny();
+  }
+  const role = agent.role || 'agent';
+  const name = agent.name || username;
 
-  await logAudit({ action: 'Failed Login', username, role: '', details: 'No matching account', ip });
-  return deny();
+  getSupabase().from('agents').update({ last_login: new Date().toISOString() }).eq('id', agent.id).then(() => {});
+  await logAudit({ action: 'Login', username, role, details: `Successful login — ${name}`, ip, organizationId: agent.organization_id });
+
+  const expiresIn = role === 'owner' ? 86400 : 28800;
+  const token = jwtSign({ sub: agent.id, organization_id: agent.organization_id, role, username, name }, secret, expiresIn);
+  return { statusCode: 200, headers: CORS, body: JSON.stringify({ token, role, name, agentId: agent.id, expiresIn }) };
 };
+

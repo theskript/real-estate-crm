@@ -8,6 +8,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 const FN = path.join(__dirname, '..', 'netlify', 'functions');
 
@@ -17,7 +18,6 @@ function freshDb() {
   process.env.SQLITE_DB_PATH = dbPath;
   process.env.DB_PROVIDER = 'sqlite'; // never touch real Supabase, even if a real .env is present
   process.env.ADMIN_JWT_SECRET = 'test-secret-do-not-use-in-prod';
-  process.env.ADMIN_PASSWORD = 'bootstrap-test-pw';
   delete require.cache[require.resolve('../netlify/functions/_sqlite.cjs')];
   const { resetDb } = require('../netlify/functions/_sqlite.cjs');
   resetDb();
@@ -44,29 +44,52 @@ function fn(name) {
   return require(path.join(FN, name));
 }
 
-/** Logs in as the env-var bootstrap owner and returns the JWT. */
-async function bootstrapOwnerToken() {
+/**
+ * Creates a brand-new organization + its first owner agent directly (same
+ * logic as scripts/provision-tenant.cjs), then logs in as that owner via the
+ * real HTTP handler. There is no login-time bootstrap bypass anymore — every
+ * login must resolve to a real agents row with a real organization_id.
+ */
+async function provisionOrg({ orgName = 'Test Org', slug, ownerUsername = 'owner', ownerName = 'Test Owner', ownerPassword = 'pw123456' } = {}) {
+  const { getSupabase } = require('../netlify/functions/_utils.cjs');
+  const sb = getSupabase();
+  const orgSlug = slug || `test-org-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const { data: org, error: orgErr } = await sb.from('organizations').insert({ name: orgName, slug: orgSlug }).select().single();
+  if (orgErr) throw new Error(`provisionOrg: failed to create org: ${orgErr.message}`);
+
+  const password_hash = await bcrypt.hash(ownerPassword, 10);
+  const { data: owner, error: ownerErr } = await sb.from('agents').insert({
+    username: ownerUsername, name: ownerName, password_hash, role: 'owner', active: true, organization_id: org.id,
+  }).select().single();
+  if (ownerErr) throw new Error(`provisionOrg: failed to create owner: ${ownerErr.message}`);
+
+  // Same starter tags every new org gets in scripts/provision-tenant.cjs — several
+  // tests (e.g. tag embeds) rely on at least one tag existing for the org.
+  await sb.from('tags').insert([
+    { name: 'First-Time Buyer', color: '#2dd4bf', organization_id: org.id },
+    { name: 'Investor', color: '#8b5cf6', organization_id: org.id },
+  ]);
+
   const authLogin = fn('auth-login.cjs');
-  const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'owner', password: process.env.ADMIN_PASSWORD } }));
-  if (res.statusCode !== 200) throw new Error(`bootstrap login failed: ${res.body}`);
-  return JSON.parse(res.body).token;
+  const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: ownerUsername, password: ownerPassword } }));
+  if (res.statusCode !== 200) throw new Error(`provisionOrg: owner login failed: ${res.body}`);
+  const ownerToken = JSON.parse(res.body).token;
+
+  return { org, owner, ownerToken };
 }
 
-/** Creates a real owner + one agent via the API, returns { ownerToken, agent, agentToken }. */
-async function createOwnerAndAgent(bootstrapToken, { username = 'agent1', name = 'Agent One' } = {}) {
+/** Provisions one org/owner, then has that owner create one more agent via the real API. Returns { org, ownerToken, agent, agentToken }. */
+async function createOwnerAndAgent({ orgName, ownerUsername = 'real.owner', username = 'agent1', name = 'Agent One' } = {}) {
+  const { org, ownerToken } = await provisionOrg({ orgName, ownerUsername, ownerName: 'Real Owner' });
   const agentsFn = fn('agents.cjs');
   const authLogin = fn('auth-login.cjs');
 
-  await agentsFn.handler(mkEvent({ method: 'POST', token: bootstrapToken, body: { username: 'real.owner', name: 'Real Owner', password: 'pw123456', role: 'owner' } }));
-  let res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'real.owner', password: 'pw123456' } }));
-  const ownerToken = JSON.parse(res.body).token;
+  const created = await agentsFn.handler(mkEvent({ method: 'POST', token: ownerToken, body: { username, name, password: 'pw123456', role: 'agent' } }));
+  const agent = JSON.parse(created.body).agent;
+  const login = await authLogin.handler(mkEvent({ method: 'POST', body: { username, password: 'pw123456' } }));
+  const agentToken = JSON.parse(login.body).token;
 
-  res = await agentsFn.handler(mkEvent({ method: 'POST', token: ownerToken, body: { username, name, password: 'pw123456', role: 'agent' } }));
-  const agent = JSON.parse(res.body).agent;
-  res = await authLogin.handler(mkEvent({ method: 'POST', body: { username, password: 'pw123456' } }));
-  const agentToken = JSON.parse(res.body).token;
-
-  return { ownerToken, agent, agentToken };
+  return { org, ownerToken, agent, agentToken };
 }
 
-module.exports = { freshDb, cleanupDb, mkEvent, fn, bootstrapOwnerToken, createOwnerAndAgent };
+module.exports = { freshDb, cleanupDb, mkEvent, fn, provisionOrg, createOwnerAndAgent };

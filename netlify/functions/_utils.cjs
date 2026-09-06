@@ -31,6 +31,56 @@ function getSupabase() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+// ── Multi-tenancy ─────────────────────────────────────────────────────────────
+// Every tenant-scoped table (all of them except `organizations` itself) has an
+// `organization_id` column (migration 0002). This is the ONLY place tenant
+// isolation is enforced — every query against one of these tables MUST go
+// through scopedTable(sb, user, table) instead of sb.from(table) directly, or
+// it will leak data across organizations. `user` is the decoded JWT (carries
+// `.organization_id`).
+//
+// Implemented as a Proxy (not a plain wrapper) because both the real
+// supabase-js client and our SQLite shim only expose `.eq()` AFTER calling
+// `.select()/.update()/.delete()` on `.from(table)` — you can't call `.eq()`
+// directly on the bare table reference. The proxy transparently injects the
+// organization_id filter right after whichever of those methods is called,
+// and stamps organization_id onto `.insert()/.upsert()` payloads. Callers
+// write exactly the same chained query code as before; only `sb.from(table)`
+// becomes `scopedTable(sb, user, table)`.
+const TENANT_SCOPED_TABLES = new Set([
+  'agents', 'leads', 'tags', 'lead_tags', 'properties', 'lead_property_matches',
+  'activities', 'tasks', 'audit_log', 'settings',
+]);
+
+function scopedTable(sb, user, table) {
+  if (!TENANT_SCOPED_TABLES.has(table)) {
+    throw new Error(`scopedTable: "${table}" is not a recognized tenant-scoped table`);
+  }
+  if (!user || !user.organization_id) {
+    throw { statusCode: 401, message: 'Missing organization context' };
+  }
+  const orgId = user.organization_id;
+  const base = sb.from(table);
+  return new Proxy(base, {
+    get(target, prop) {
+      const value = target[prop];
+      if (typeof value !== 'function') return value;
+      if (prop === 'select' || prop === 'update' || prop === 'delete') {
+        return (...args) => value.apply(target, args).eq('organization_id', orgId);
+      }
+      if (prop === 'insert' || prop === 'upsert') {
+        return (...args) => {
+          const stamped = Array.isArray(args[0])
+            ? args[0].map(row => ({ ...row, organization_id: orgId }))
+            : { ...args[0], organization_id: orgId };
+          return value.call(target, stamped, ...args.slice(1));
+        };
+      }
+      return value.bind(target);
+    },
+  });
+}
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
 function cors(methods = 'GET, OPTIONS') {
@@ -89,7 +139,7 @@ function requireAuth(event, requiredRole = null) {
 
 // ── Audit logging ─────────────────────────────────────────────────────────────
 
-async function logAudit({ action, username = '', role = '', details = '', targetId = '', ip = '' }) {
+async function logAudit({ action, username = '', role = '', details = '', targetId = '', ip = '', organizationId = null }) {
   try {
     const detailsStr = typeof details === 'object' ? JSON.stringify(details) : String(details);
     const { error } = await getSupabase().from('audit_log').insert({
@@ -99,6 +149,7 @@ async function logAudit({ action, username = '', role = '', details = '', target
       details: detailsStr.substring(0, 2000),
       target_id: targetId,
       ip_address: ip,
+      organization_id: organizationId,
     });
     if (error) console.error('[audit] Supabase insert error:', error.message);
   } catch (err) {
@@ -140,6 +191,7 @@ async function sendSMS(to, body) {
 
 module.exports = {
   getSupabase,
+  scopedTable,
   cors,
   jwtSign, jwtVerify, requireAuth,
   logAudit, getClientIP,

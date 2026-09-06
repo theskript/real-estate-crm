@@ -1,6 +1,6 @@
 'use strict';
 
-const { requireAuth, getSupabase, cors, logAudit, getClientIP } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors, logAudit, getClientIP } = require('./_utils.cjs');
 
 const CORS = cors('GET, POST, PATCH, DELETE');
 const LEAD_SELECT = '*, tags:lead_tags(tag:tags(id,name,color)), agent:agents(id,name,avatar_color)';
@@ -12,19 +12,19 @@ function shapeLead(row) {
   return { ...rest, tags: (tags || []).map(t => t.tag).filter(Boolean), agent: agent || null };
 }
 
-async function syncTags(sb, leadId, tagIds) {
+async function syncTags(sb, user, leadId, tagIds) {
   if (!Array.isArray(tagIds)) return;
-  await sb.from('lead_tags').delete().eq('lead_id', leadId);
+  await scopedTable(sb, user, 'lead_tags').delete().eq('lead_id', leadId);
   if (tagIds.length) {
-    await sb.from('lead_tags').insert(tagIds.map(tag_id => ({ lead_id: leadId, tag_id })));
+    await scopedTable(sb, user, 'lead_tags').insert(tagIds.map(tag_id => ({ lead_id: leadId, tag_id })));
   }
 }
 
-/** Picks the active agent with the fewest open leads — simple round-robin assignment. */
-async function autoAssignAgent(sb) {
-  const { data: agents } = await sb.from('agents').select('id').eq('role', 'agent').eq('active', true);
+/** Picks the active agent (within the caller's org) with the fewest open leads — simple round-robin assignment. */
+async function autoAssignAgent(sb, user) {
+  const { data: agents } = await scopedTable(sb, user, 'agents').select('id').eq('role', 'agent').eq('active', true);
   if (!agents || !agents.length) return null;
-  const { data: openLeads } = await sb.from('leads').select('assigned_agent_id')
+  const { data: openLeads } = await scopedTable(sb, user, 'leads').select('assigned_agent_id')
     .not('stage', 'in', '(closed_won,closed_lost)');
   const counts = Object.fromEntries(agents.map(a => [a.id, 0]));
   for (const l of openLeads || []) if (l.assigned_agent_id in counts) counts[l.assigned_agent_id]++;
@@ -46,7 +46,7 @@ exports.handler = async (event) => {
   // ── GET — list (with filters) or single lead by id ────────────────────────
   if (event.httpMethod === 'GET') {
     if (q.id) {
-      let query = sb.from('leads').select(LEAD_SELECT).eq('id', q.id);
+      let query = scopedTable(sb, user, 'leads').select(LEAD_SELECT).eq('id', q.id);
       if (!isOwner) query = query.eq('assigned_agent_id', user.sub);
       const { data, error } = await query.maybeSingle();
       if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
@@ -54,7 +54,7 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: CORS, body: JSON.stringify({ lead: shapeLead(data) }) };
     }
 
-    let query = sb.from('leads').select(LEAD_SELECT).order('created_at', { ascending: false });
+    let query = scopedTable(sb, user, 'leads').select(LEAD_SELECT).order('created_at', { ascending: false });
     // Access control: agents only ever see their own book; owner may filter by agent
     if (!isOwner) query = query.eq('assigned_agent_id', user.sub);
     else if (q.assigned_agent_id) query = query.eq('assigned_agent_id', q.assigned_agent_id);
@@ -85,15 +85,15 @@ exports.handler = async (event) => {
     if (!fields.first_name || !fields.lead_type) {
       return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'first_name and lead_type are required' }) };
     }
-    if (auto_assign) fields.assigned_agent_id = await autoAssignAgent(sb);
+    if (auto_assign) fields.assigned_agent_id = await autoAssignAgent(sb, user);
     else if (!fields.assigned_agent_id && !isOwner) fields.assigned_agent_id = user.sub;
 
-    const { data, error } = await sb.from('leads').insert(fields).select(LEAD_SELECT).single();
+    const { data, error } = await scopedTable(sb, user, 'leads').insert(fields).select(LEAD_SELECT).single();
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
-    await syncTags(sb, data.id, tag_ids);
-    await sb.from('activities').insert({ lead_id: data.id, agent_id: user.sub, type: 'note', body: 'Lead created' });
-    await logAudit({ action: 'Create Lead', username: user.username, role: user.role, details: `${fields.first_name} ${fields.last_name || ''}`.trim(), targetId: data.id, ip });
-    const { data: full } = await sb.from('leads').select(LEAD_SELECT).eq('id', data.id).single();
+    await syncTags(sb, user, data.id, tag_ids);
+    await scopedTable(sb, user, 'activities').insert({ lead_id: data.id, agent_id: user.sub, type: 'note', body: 'Lead created' });
+    await logAudit({ action: 'Create Lead', username: user.username, role: user.role, details: `${fields.first_name} ${fields.last_name || ''}`.trim(), targetId: data.id, ip, organizationId: user.organization_id });
+    const { data: full } = await scopedTable(sb, user, 'leads').select(LEAD_SELECT).eq('id', data.id).single();
     return { statusCode: 201, headers: CORS, body: JSON.stringify({ lead: shapeLead(full) }) };
   }
 
@@ -102,7 +102,7 @@ exports.handler = async (event) => {
     const id = q.id;
     if (!id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'id is required' }) };
 
-    const { data: existing } = await sb.from('leads').select('assigned_agent_id,stage,temperature').eq('id', id).maybeSingle();
+    const { data: existing } = await scopedTable(sb, user, 'leads').select('assigned_agent_id,stage,temperature').eq('id', id).maybeSingle();
     if (!existing) return { statusCode: 404, headers: CORS, body: JSON.stringify({ error: 'Lead not found' }) };
     if (!isOwner && existing.assigned_agent_id !== user.sub) {
       return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'You can only edit leads assigned to you' }) };
@@ -116,21 +116,21 @@ exports.handler = async (event) => {
     delete fields.id;
 
     if (Object.keys(fields).length) {
-      const { error } = await sb.from('leads').update(fields).eq('id', id);
+      const { error } = await scopedTable(sb, user, 'leads').update(fields).eq('id', id);
       if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     }
-    await syncTags(sb, id, tag_ids);
+    await syncTags(sb, user, id, tag_ids);
 
     // Log a stage/temperature change as a timeline activity so it shows up alongside calls/notes
     const changes = [];
     if (fields.stage && fields.stage !== existing.stage) changes.push(`stage → ${fields.stage}`);
     if (fields.temperature && fields.temperature !== existing.temperature) changes.push(`temperature → ${fields.temperature}`);
     if (changes.length) {
-      await sb.from('activities').insert({ lead_id: id, agent_id: user.sub, type: 'status_change', body: changes.join(', ') });
+      await scopedTable(sb, user, 'activities').insert({ lead_id: id, agent_id: user.sub, type: 'status_change', body: changes.join(', ') });
     }
 
-    await logAudit({ action: 'Update Lead', username: user.username, role: user.role, details: JSON.stringify(fields), targetId: id, ip });
-    const { data: full } = await sb.from('leads').select(LEAD_SELECT).eq('id', id).single();
+    await logAudit({ action: 'Update Lead', username: user.username, role: user.role, details: JSON.stringify(fields), targetId: id, ip, organizationId: user.organization_id });
+    const { data: full } = await scopedTable(sb, user, 'leads').select(LEAD_SELECT).eq('id', id).single();
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ lead: shapeLead(full) }) };
   }
 
@@ -139,9 +139,11 @@ exports.handler = async (event) => {
     const id = q.id;
     if (!id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'id is required' }) };
     if (!isOwner) return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Owner access required' }) };
-    const { error } = await sb.from('leads').delete().eq('id', id);
+    const { data: existing } = await scopedTable(sb, user, 'leads').select('id').eq('id', id).maybeSingle();
+    if (!existing) return { statusCode: 404, headers: CORS, body: JSON.stringify({ error: 'Lead not found' }) };
+    const { error } = await scopedTable(sb, user, 'leads').delete().eq('id', id);
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
-    await logAudit({ action: 'Delete Lead', username: user.username, role: user.role, details: id, ip });
+    await logAudit({ action: 'Delete Lead', username: user.username, role: user.role, details: id, ip, organizationId: user.organization_id });
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
   }
 

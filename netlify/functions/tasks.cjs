@@ -1,6 +1,6 @@
 'use strict';
 
-const { requireAuth, getSupabase, cors, logAudit, getClientIP } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors, logAudit, getClientIP } = require('./_utils.cjs');
 
 const CORS = cors('GET, POST, PATCH, DELETE');
 const TASK_SELECT = '*, lead:leads(id,first_name,last_name,lead_type,temperature), agent:agents(id,name,avatar_color)';
@@ -18,7 +18,7 @@ exports.handler = async (event) => {
   const q = event.queryStringParameters || {};
 
   if (event.httpMethod === 'GET') {
-    let query = sb.from('tasks').select(TASK_SELECT).order('due_at', { ascending: true, nullsFirst: false });
+    let query = scopedTable(sb, user, 'tasks').select(TASK_SELECT).order('due_at', { ascending: true, nullsFirst: false });
     if (!isOwner) query = query.eq('agent_id', user.sub);
     else if (q.agent_id) query = query.eq('agent_id', q.agent_id);
 
@@ -39,16 +39,16 @@ exports.handler = async (event) => {
     }
     if (!body.title) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'title is required' }) };
     const agent_id = body.agent_id || user.sub;
-    const { data, error } = await sb.from('tasks').insert({ ...body, agent_id }).select(TASK_SELECT).single();
+    const { data, error } = await scopedTable(sb, user, 'tasks').insert({ ...body, agent_id }).select(TASK_SELECT).single();
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
-    await logAudit({ action: 'Create Task', username: user.username, role: user.role, details: body.title, targetId: data.id, ip });
+    await logAudit({ action: 'Create Task', username: user.username, role: user.role, details: body.title, targetId: data.id, ip, organizationId: user.organization_id });
     return { statusCode: 201, headers: CORS, body: JSON.stringify({ task: data }) };
   }
 
   if (event.httpMethod === 'PATCH') {
     const id = q.id;
     if (!id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'id is required' }) };
-    const { data: existing } = await sb.from('tasks').select('agent_id').eq('id', id).maybeSingle();
+    const { data: existing } = await scopedTable(sb, user, 'tasks').select('agent_id').eq('id', id).maybeSingle();
     if (!existing) return { statusCode: 404, headers: CORS, body: JSON.stringify({ error: 'Task not found' }) };
     if (!isOwner && existing.agent_id !== user.sub) {
       return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'You can only edit your own tasks' }) };
@@ -58,7 +58,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Invalid JSON' }) };
     }
     if (body.status === 'completed' && !body.completed_at) body.completed_at = new Date().toISOString();
-    const { data, error } = await sb.from('tasks').update(body).eq('id', id).select(TASK_SELECT).single();
+    const { data, error } = await scopedTable(sb, user, 'tasks').update(body).eq('id', id).select(TASK_SELECT).single();
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ task: data }) };
   }
@@ -66,12 +66,12 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'DELETE') {
     const id = q.id;
     if (!id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'id is required' }) };
-    const { data: existing } = await sb.from('tasks').select('agent_id').eq('id', id).maybeSingle();
+    const { data: existing } = await scopedTable(sb, user, 'tasks').select('agent_id').eq('id', id).maybeSingle();
     if (!existing) return { statusCode: 404, headers: CORS, body: JSON.stringify({ error: 'Task not found' }) };
     if (!isOwner && existing.agent_id !== user.sub) {
       return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'You can only delete your own tasks' }) };
     }
-    const { error } = await sb.from('tasks').delete().eq('id', id);
+    const { error } = await scopedTable(sb, user, 'tasks').delete().eq('id', id);
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
   }

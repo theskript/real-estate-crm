@@ -1,23 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { freshDb, cleanupDb, mkEvent, fn } from './setup.cjs';
+import { freshDb, cleanupDb, mkEvent, fn, provisionOrg } from './setup.cjs';
 
 describe('auth-login', () => {
   let dbPath;
   beforeEach(() => { dbPath = freshDb(); });
   afterEach(() => cleanupDb(dbPath));
 
-  it('logs in as bootstrap owner via ADMIN_PASSWORD when no agents exist', async () => {
+  it('logs in a real owner agent created via provisioning, with organization_id in the token', async () => {
     const authLogin = fn('auth-login.cjs');
-    const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'owner', password: process.env.ADMIN_PASSWORD } }));
+    const { org } = await provisionOrg({ ownerUsername: 'sarah', ownerPassword: 'correcthorse' });
+    const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'sarah', password: 'correcthorse' } }));
     expect(res.statusCode).toBe(200);
     const data = JSON.parse(res.body);
     expect(data.role).toBe('owner');
     expect(data.token.split('.')).toHaveLength(3);
+    const payload = JSON.parse(Buffer.from(data.token.split('.')[1], 'base64url').toString('utf8'));
+    expect(payload.organization_id).toBe(org.id);
   });
 
-  it('rejects the bootstrap login with a wrong password', async () => {
+  it('rejects a wrong password', async () => {
     const authLogin = fn('auth-login.cjs');
-    const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'owner', password: 'wrong' } }));
+    await provisionOrg({ ownerUsername: 'sarah', ownerPassword: 'correcthorse' });
+    const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'sarah', password: 'wrong' } }));
     expect(res.statusCode).toBe(401);
   });
 
@@ -30,10 +34,9 @@ describe('auth-login', () => {
   it('logs in a real agent row created via the agents API, and rejects their wrong password', async () => {
     const authLogin = fn('auth-login.cjs');
     const agentsFn = fn('agents.cjs');
-    const bootstrap = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'owner', password: process.env.ADMIN_PASSWORD } }));
-    const bootstrapToken = JSON.parse(bootstrap.body).token;
+    const { ownerToken } = await provisionOrg();
 
-    await agentsFn.handler(mkEvent({ method: 'POST', token: bootstrapToken, body: { username: 'jane', name: 'Jane Agent', password: 'correcthorse', role: 'agent' } }));
+    await agentsFn.handler(mkEvent({ method: 'POST', token: ownerToken, body: { username: 'jane', name: 'Jane Agent', password: 'correcthorse', role: 'agent' } }));
 
     const good = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'jane', password: 'correcthorse' } }));
     expect(good.statusCode).toBe(200);
@@ -46,12 +49,11 @@ describe('auth-login', () => {
   it('rejects login for a deactivated agent', async () => {
     const authLogin = fn('auth-login.cjs');
     const agentsFn = fn('agents.cjs');
-    const bootstrap = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'owner', password: process.env.ADMIN_PASSWORD } }));
-    const bootstrapToken = JSON.parse(bootstrap.body).token;
+    const { ownerToken } = await provisionOrg();
 
-    const created = await agentsFn.handler(mkEvent({ method: 'POST', token: bootstrapToken, body: { username: 'bob', name: 'Bob Agent', password: 'pw123456', role: 'agent' } }));
+    const created = await agentsFn.handler(mkEvent({ method: 'POST', token: ownerToken, body: { username: 'bob', name: 'Bob Agent', password: 'pw123456', role: 'agent' } }));
     const agentId = JSON.parse(created.body).agent.id;
-    await agentsFn.handler(mkEvent({ method: 'DELETE', token: bootstrapToken, qs: { id: agentId } })); // soft-delete = deactivate
+    await agentsFn.handler(mkEvent({ method: 'DELETE', token: ownerToken, qs: { id: agentId } })); // soft-delete = deactivate
 
     const res = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'bob', password: 'pw123456' } }));
     expect(res.statusCode).toBe(401);
@@ -62,10 +64,8 @@ describe('auth-login', () => {
     const noToken = await agentsFn.handler(mkEvent({ method: 'GET' }));
     expect(noToken.statusCode).toBe(401);
 
-    const authLogin = fn('auth-login.cjs');
-    const bootstrap = await authLogin.handler(mkEvent({ method: 'POST', body: { username: 'owner', password: process.env.ADMIN_PASSWORD } }));
-    const token = JSON.parse(bootstrap.body).token;
-    const tampered = token.slice(0, -2) + 'xx';
+    const { ownerToken } = await provisionOrg();
+    const tampered = ownerToken.slice(0, -2) + 'xx';
     const res = await agentsFn.handler(mkEvent({ method: 'GET', token: tampered }));
     expect(res.statusCode).toBe(401);
   });

@@ -1,6 +1,6 @@
 'use strict';
 
-const { requireAuth, getSupabase, cors, logAudit, getClientIP } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors, logAudit, getClientIP } = require('./_utils.cjs');
 
 const CORS = cors('GET, PATCH');
 
@@ -15,7 +15,7 @@ exports.handler = async (event) => {
   const ip = getClientIP(event);
 
   if (event.httpMethod === 'GET') {
-    const { data, error } = await sb.from('settings').select('key,value');
+    const { data, error } = await scopedTable(sb, user, 'settings').select('key,value');
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     const settings = Object.fromEntries((data || []).map(({ key, value }) => [key, value]));
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ settings }) };
@@ -29,9 +29,9 @@ exports.handler = async (event) => {
     }
     const rows = Object.entries(body).map(([key, value]) => ({ key, value: String(value) }));
     if (!rows.length) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'No settings provided' }) };
-    const { error } = await sb.from('settings').upsert(rows, { onConflict: 'key' });
+    const { error } = await scopedTable(sb, user, 'settings').upsert(rows, { onConflict: 'organization_id,key' });
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
-    await logAudit({ action: 'Update Settings', username: user.username, role: user.role, details: JSON.stringify(body), ip });
+    await logAudit({ action: 'Update Settings', username: user.username, role: user.role, details: JSON.stringify(body), ip, organizationId: user.organization_id });
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
   }
 

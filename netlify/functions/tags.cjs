@@ -1,6 +1,6 @@
 'use strict';
 
-const { requireAuth, getSupabase, cors } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors } = require('./_utils.cjs');
 
 const CORS = cors('GET, POST, DELETE');
 
@@ -14,7 +14,7 @@ exports.handler = async (event) => {
   const sb = getSupabase();
 
   if (event.httpMethod === 'GET') {
-    const { data, error } = await sb.from('tags').select('*').order('name');
+    const { data, error } = await scopedTable(sb, user, 'tags').select('*').order('name');
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ tags: data }) };
   }
@@ -25,7 +25,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Invalid JSON' }) };
     }
     if (!body.name) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'name is required' }) };
-    const { data, error } = await sb.from('tags').insert({ name: body.name, color: body.color || '#64748b' }).select().single();
+    const { data, error } = await scopedTable(sb, user, 'tags').insert({ name: body.name, color: body.color || '#64748b' }).select().single();
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 201, headers: CORS, body: JSON.stringify({ tag: data }) };
   }
@@ -34,7 +34,7 @@ exports.handler = async (event) => {
     const id = (event.queryStringParameters || {}).id;
     if (!id) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'id is required' }) };
     if (user.role !== 'owner') return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Owner access required' }) };
-    const { error } = await sb.from('tags').delete().eq('id', id);
+    const { error } = await scopedTable(sb, user, 'tags').delete().eq('id', id);
     if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true }) };
   }

@@ -1,7 +1,7 @@
 'use strict';
 
 const { parse } = require('csv-parse/sync');
-const { requireAuth, getSupabase, cors, logAudit, getClientIP } = require('./_utils.cjs');
+const { requireAuth, getSupabase, scopedTable, cors, logAudit, getClientIP } = require('./_utils.cjs');
 
 const CORS = cors('POST');
 
@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Max 1000 rows per import — split your file and try again' }) };
   }
 
-  const { data: existing } = await sb.from('leads').select('email,phone');
+  const { data: existing } = await scopedTable(sb, user, 'leads').select('email,phone');
   const existingEmails = new Set((existing || []).map(l => (l.email || '').toLowerCase()).filter(Boolean));
   const existingPhones = new Set((existing || []).map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
 
@@ -71,9 +71,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers: CORS, body: JSON.stringify({ imported: 0, skipped, total: rows.length }) };
   }
 
-  const { data, error } = await sb.from('leads').insert(toInsert).select('id');
+  const { data, error } = await scopedTable(sb, user, 'leads').insert(toInsert).select('id');
   if (error) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: error.message }) };
 
-  await logAudit({ action: 'Import Leads', username: user.username, role: user.role, details: `Imported ${data.length}, skipped ${skipped} duplicates`, ip });
+  await logAudit({ action: 'Import Leads', username: user.username, role: user.role, details: `Imported ${data.length}, skipped ${skipped} duplicates`, ip, organizationId: user.organization_id });
   return { statusCode: 200, headers: CORS, body: JSON.stringify({ imported: data.length, skipped, total: rows.length }) };
 };

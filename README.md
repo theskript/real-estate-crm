@@ -53,9 +53,8 @@ completely unchanged** either way.
   swapping in [Turso](https://turso.tech) (hosted, serverless-friendly SQLite)
   — it speaks the same SQL dialect as this fallback, so migrating is a driver
   swap, not a rewrite.
-- A regression test for the fallback lives at
-  [scripts/smoke-test-sqlite.cjs](scripts/smoke-test-sqlite.cjs) — run
-  `node scripts/smoke-test-sqlite.cjs` any time you touch `_sqlite.cjs`.
+- A regression test for the fallback lives in [tests/](tests/) (`npm test`)
+  — run it any time you touch `_sqlite.cjs`.
 
 ## Using Supabase instead (recommended once it's back up)
 
@@ -99,21 +98,27 @@ cp .env.example .env
 | `SUPABASE_URL` | Supabase → Project Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (service_role, secret) |
 | `ADMIN_JWT_SECRET` | Generate with `openssl rand -hex 32` |
-| `ADMIN_PASSWORD` | Any password you choose — used only for your very first login (see below) |
 | `DB_PROVIDER` | Leave unset. Set to `sqlite` to force the local fallback even if Supabase vars are also present. |
 
-## 3. First login (bootstrap)
+## 3. Create your organization and first owner login
 
-There's no `agents` row yet, so the CRM lets you log in once as `owner` using
-the `ADMIN_PASSWORD` env var. Log in with:
+Teaka is multi-tenant — every login belongs to exactly one **organization**
+(brokerage/team), and there's no login-time bootstrap bypass. Create your
+first organization + owner account with:
 
-- Username: `owner`
-- Password: whatever you set `ADMIN_PASSWORD` to
+```bash
+node scripts/provision-tenant.cjs --org="Acme Realty" --owner-name="Jane Doe" \
+  --owner-username=jane --owner-password=SecurePass123
+```
 
-Then immediately go to **Team** (owner-only nav item) and create your real
-owner/agent accounts with proper passwords. The `ADMIN_PASSWORD` fallback
-still works as a break-glass login if you ever get locked out, but day-to-day
-logins should use real `agents` rows.
+Then log in with that username/password. From **Team** (owner-only nav item)
+you can add more agents to the same organization — but usernames are globally
+unique across the whole platform (not just your org), since each agent
+belongs to exactly one organization (no multi-org membership).
+
+Run `provision-tenant.cjs` again with different `--org`/`--owner-*` flags any
+time you want to add another completely separate organization (e.g. to test
+tenant isolation locally, or onboard a new customer).
 
 ## 4. Install & run locally
 
@@ -148,7 +153,8 @@ wipe and regenerate the same dataset fresh (e.g. before a demo call).
 
 ## What's built (MVP)
 
-- **Auth**: JWT login, owner/agent roles, per-agent lead visibility (agents only see their own assigned leads; owners see everything)
+- **Multi-tenant**: every table is scoped to an `organization`; one agent belongs to exactly one organization (no multi-org membership, no org-picker UI needed)
+- **Auth**: JWT login, owner/agent roles, per-agent lead visibility (agents only see their own assigned leads; owners see everything **within their own organization**)
 - **Leads**: buyer/seller type, hot/warm/cold temperature, 7-stage pipeline, table **and** drag-and-drop Kanban views, search/filter, tags, round-robin auto-assign
 - **Lead detail**: activity timeline (calls/texts/emails/notes/showings), tasks, notes, tags, click-to-call/text/email (uses `tel:`/`sms:`/`mailto:` today — see Dialer below)
 - **Tasks**: follow-up queue (overdue/today/upcoming/completed) across the whole team
@@ -159,6 +165,27 @@ wipe and regenerate the same dataset fresh (e.g. before a demo call).
 - **Settings**: tags, lead sources, CSV lead import with duplicate detection
 - **Dashboard**: open/hot/overdue stats, pipeline funnel, hot-lead alert list, follow-up queue
 - **Demo data**: one-command realistic seed script for demoing (see step 5 above)
+
+## Multi-tenancy
+
+Every table except `organizations` itself has an `organization_id` column
+(migration `0002_multi_tenant`). This is enforced in exactly **one** place:
+`scopedTable(sb, user, table)` in `netlify/functions/_utils.cjs` — every query
+against a tenant-scoped table must go through it instead of `sb.from(table)`
+directly, or it will leak data across organizations. It's implemented as a
+Proxy that transparently injects an `organization_id` filter after
+`.select()/.update()/.delete()` and stamps `organization_id` onto
+`.insert()/.upsert()` payloads, so every call site reads exactly like normal
+Supabase query-builder code.
+
+[tests/tenant-isolation.test.js](tests/tenant-isolation.test.js) is the most
+important test in the suite — it provisions two separate organizations and
+asserts one can never read, edit, or delete the other's data through any
+endpoint, even as "owner" (owner only ever means owner of *your* organization).
+
+Onboarding a new organization is a CLI operation
+(`node scripts/provision-tenant.cjs ...`), not a self-serve signup flow —
+billing/plan selection is intentionally out of scope for now (see roadmap).
 
 ## What's intentionally deferred (roadmap)
 
@@ -173,6 +200,8 @@ wipe and regenerate the same dataset fresh (e.g. before a demo call).
 - **Inbound lead webhooks** (Zillow/Realtor.com/Facebook Lead Ads → `leads` table directly, bypassing manual CSV import)
 - **Email/SMS drip templates** by temperature/stage
 - **Full listing-appointment scheduling** (separate from generic tasks)
+- **Self-serve signup + billing** (Stripe subscriptions, plan/seat limits, a cross-tenant super-admin panel) — organizations are currently provisioned manually via `scripts/provision-tenant.cjs`
+- **Per-organization customization** of pipeline stages/temperature scale (currently fixed Postgres `CHECK` constraints shared by all organizations) and white-labeling (logo/colors/custom domain)
 
 ## Project structure
 
@@ -188,12 +217,13 @@ teaka-crm/
 │   ├── _utils.cjs                    # auth/JWT/audit/CORS + getSupabase() DB switch
 │   └── _sqlite.cjs                   # local SQLite fallback (see below)
 ├── migrations/                       # versioned schema changes (see migrations/README.md)
-│   └── 0001_initial_schema/postgres.sql, sqlite.sql
+│   ├── 0001_initial_schema/postgres.sql, sqlite.sql
+│   └── 0002_multi_tenant/postgres.sql, sqlite.sql
 ├── tests/                            # vitest suite — exercises real handlers against SQLite
 ├── scripts/
 │   ├── migrate.cjs                   # applies migrations/ to Postgres or SQLite
-│   ├── seed-demo-data.cjs            # populates realistic demo data (see step 5)
-│   └── smoke-test-sqlite.cjs         # manual end-to-end smoke test for the SQLite fallback
+│   ├── provision-tenant.cjs          # creates a new organization + first owner agent
+│   └── seed-demo-data.cjs            # populates realistic demo data (see step 5)
 ├── .github/workflows/ci.yml          # runs `npm test` + `npm run build` on every push/PR
 └── netlify.toml
 ```

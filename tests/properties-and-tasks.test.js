@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { freshDb, cleanupDb, mkEvent, fn, bootstrapOwnerToken, createOwnerAndAgent } from './setup.cjs';
+import { freshDb, cleanupDb, mkEvent, fn, createOwnerAndAgent } from './setup.cjs';
 
 // These specifically guard against a real bug class found while building the
 // SQLite fallback: nested embeds silently returning empty/null when a
@@ -8,8 +8,7 @@ describe('properties — nested embeds (seller_lead, matches.lead)', () => {
   let dbPath, ownerToken;
   beforeEach(async () => {
     dbPath = freshDb();
-    const bootstrapToken = await bootstrapOwnerToken();
-    ownerToken = (await createOwnerAndAgent(bootstrapToken)).ownerToken;
+    ownerToken = (await createOwnerAndAgent()).ownerToken;
   });
   afterEach(() => cleanupDb(dbPath));
 
@@ -55,8 +54,7 @@ describe('tasks & activities', () => {
   let dbPath, ownerToken, agentToken, leadId;
   beforeEach(async () => {
     dbPath = freshDb();
-    const bootstrapToken = await bootstrapOwnerToken();
-    const setup = await createOwnerAndAgent(bootstrapToken);
+    const setup = await createOwnerAndAgent();
     ownerToken = setup.ownerToken;
     agentToken = setup.agentToken;
     const leadsFn = fn('leads.cjs');

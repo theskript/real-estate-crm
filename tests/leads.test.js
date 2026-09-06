@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { freshDb, cleanupDb, mkEvent, fn, bootstrapOwnerToken, createOwnerAndAgent } from './setup.cjs';
+import { freshDb, cleanupDb, mkEvent, fn, createOwnerAndAgent } from './setup.cjs';
 
 describe('leads — CRUD, embeds, filters', () => {
   let dbPath, ownerToken, agentToken, agentId;
   beforeEach(async () => {
     dbPath = freshDb();
-    const bootstrapToken = await bootstrapOwnerToken();
-    const setup = await createOwnerAndAgent(bootstrapToken);
+    const setup = await createOwnerAndAgent();
     ownerToken = setup.ownerToken;
     agentToken = setup.agentToken;
     agentId = setup.agent.id;

@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { freshDb, cleanupDb, mkEvent, fn, bootstrapOwnerToken, createOwnerAndAgent } from './setup.cjs';
+import { freshDb, cleanupDb, mkEvent, fn, createOwnerAndAgent } from './setup.cjs';
 
 describe('access control — per-agent lead visibility', () => {
   let dbPath, ownerToken, agentToken, agent2Token, leadId;
   beforeEach(async () => {
     dbPath = freshDb();
-    const bootstrapToken = await bootstrapOwnerToken();
-    const setup = await createOwnerAndAgent(bootstrapToken, { username: 'agent1', name: 'Agent One' });
+    const setup = await createOwnerAndAgent({ username: 'agent1', name: 'Agent One' });
     ownerToken = setup.ownerToken;
     agentToken = setup.agentToken;
 
